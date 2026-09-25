@@ -1,7 +1,7 @@
 {
   "name": "stx-typescript-demo",
-  "version": "0.1.0",
-  "description": "Standalone reference demo consuming stx-typescript — the ISV OAuth path end to end, plus a direct-trader signing snippet.",
+  "version": "0.4.0",
+  "description": "Runnable examples for the STX TypeScript SDK, @stxapp/stx-typescript.",
   "type": "module",
   "private": true,
   "license": "MIT",
@@ -9,19 +9,21 @@
     "node": ">=18"
   },
   "scripts": {
-    "start": "node --experimental-strip-types src/server.ts",
-    "start:bun": "bun run src/server.ts",
-    "signing": "node --experimental-strip-types src/signing-demo.ts",
-    "signing:bun": "bun run src/signing-demo.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "tsc --noEmit",
+    "quickstart": "tsx examples/quickstart.ts",
+    "market-data": "tsx examples/market-data.ts",
+    "live-prices": "tsx examples/live-prices.ts",
+    "account-view": "tsx examples/account-view.ts",
+    "trading": "tsx examples/trading.ts",
+    "portfolio": "tsx examples/portfolio.ts"
   },
   "dependencies": {
-    "stx-typescript": "file:../tssdk"
+    "@stxapp/stx-typescript": "^0.4.2"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
-    "typescript": "^5.5.4",
-    "vitest": "^2.0.5"
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
   }
 }

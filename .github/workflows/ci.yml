@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  pull_request:
+    branches: ["main"]
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ["18", "20", "22"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install
+        run: bash .github/install.sh
+        env:
+          SDK_RELEASE_REPO: ${{ secrets.SDK_RELEASE_REPO }}
+          SDK_RELEASE_TOKEN: ${{ secrets.SDK_RELEASE_TOKEN }}
+
+      - name: Typecheck
+        run: npm run typecheck
+
+  quickstart:
+    # Runs the quickstart against the US demo exchange (demo.stxapp.io, no real
+    # money) when the repository has an API key for it, and skips otherwise.
+    needs: typecheck
+    runs-on: ubuntu-latest
+    env:
+      STX_KEY_ID: ${{ secrets.DEMO_KEY_ID }}
+      # The secret holds the PEM text, so no key file is written on the runner.
+      STX_PRIVATE_KEY: ${{ secrets.DEMO_PRIVATE_KEY }}
+      STX_REGION: us
+      STX_ENV: demo
+    steps:
+      - name: Check for demo credentials
+        id: creds
+        run: |
+          if [ -n "$STX_KEY_ID" ] && [ -n "$STX_PRIVATE_KEY" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::DEMO_KEY_ID / DEMO_PRIVATE_KEY are not set; skipping the demo run."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.creds.outputs.present == 'true'
+        uses: actions/checkout@v4
+
+      - if: steps.creds.outputs.present == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install
+        if: steps.creds.outputs.present == 'true'
+        run: bash .github/install.sh
+        env:
+          SDK_RELEASE_REPO: ${{ secrets.SDK_RELEASE_REPO }}
+          SDK_RELEASE_TOKEN: ${{ secrets.SDK_RELEASE_TOKEN }}
+
+      - name: Run the quickstart on the US demo
+        if: steps.creds.outputs.present == 'true'
+        run: npx tsx examples/quickstart.ts
