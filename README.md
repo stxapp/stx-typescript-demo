@@ -15,12 +15,6 @@ cd stx-typescript-demo
 npm install
 ```
 
-`package.json` depends on `@stxapp/stx-typescript` `^0.4.2`. If that version is not on npm yet and you have the release tarball, install from it instead of the plain `npm install`:
-
-```bash
-npm install --no-save "@stxapp/stx-typescript@file:/path/to/stx-typescript-0.4.2.tgz"
-```
-
 ## Set up your API key
 
 Save the private key you downloaded to a file such as `~/.stx/us-demo.pem`, then add a profile for it to `~/.stx/credentials`:

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Install dependencies for CI. Once @stxapp/stx-typescript is on npm this is a
-# plain `npm install`. Until then, when the SDK_RELEASE_REPO and
+# Install dependencies for CI: a plain `npm install` once
+# @stxapp/stx-typescript is on npm. Until then, when the SDK_RELEASE_REPO and
 # SDK_RELEASE_TOKEN secrets are set, it installs the SDK from the release
-# tarball instead, the same way the README describes for local development.
+# tarball under the npm name. Remove the tarball fallback, this script and the
+# two secrets once the package is on npm.
 set -euo pipefail
 
 if npm view "@stxapp/stx-typescript@^0.4.2" version >/dev/null 2>&1; then

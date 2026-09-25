@@ -26,6 +26,8 @@ jobs:
           node-version: ${{ matrix.node-version }}
 
       - name: Install
+        # Falls back to the SDK release tarball while @stxapp/stx-typescript is
+        # not on npm yet. Replace with `npm install` once it is published.
         run: bash .github/install.sh
         env:
           SDK_RELEASE_REPO: ${{ secrets.SDK_RELEASE_REPO }}
@@ -66,6 +68,7 @@ jobs:
 
       - name: Install
         if: steps.creds.outputs.present == 'true'
+        # Same tarball fallback as above; replace with `npm install` once published.
         run: bash .github/install.sh
         env:
           SDK_RELEASE_REPO: ${{ secrets.SDK_RELEASE_REPO }}
