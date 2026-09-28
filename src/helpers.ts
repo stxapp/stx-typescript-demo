@@ -55,13 +55,15 @@ export function wouldRest(market: Market, price: string): boolean {
  * The first open market that is accepting orders, whose event has not
  * started, and where a buy at restingBuyPrice() would rest. Returns the
  * market and that price, or null when none of the first `scan` markets fit.
+ * Pass `sport` (e.g. "Football") to look only at markets in that sport.
  */
 export async function findRestingBuy(
   client: STX,
-  scan = 200,
+  { sport, scan = 200 }: { sport?: string; scan?: number } = {},
 ): Promise<{ market: Market; price: string } | null> {
   let seen = 0;
-  for await (const market of client.iterMarkets({ status: "open", trading: true })) {
+  const query = { status: "open", trading: true, ...(sport ? { sports: [sport] } : {}) } as const;
+  for await (const market of client.iterMarkets(query)) {
     if (++seen > scan) break;
     if (!market.market_id || !market.max_price) continue;
     if (market.event_status && market.event_status !== "scheduled") continue;

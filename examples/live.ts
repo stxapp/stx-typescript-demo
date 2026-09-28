@@ -5,6 +5,7 @@
 //
 // Run: npm run live            (streams for 30 seconds)
 //      npm run live -- 60      (streams for 60 seconds)
+//      SPORT=Football npm run live   (watch a market in that sport, as trade does)
 
 import { STX, type AccountChange } from "@stxapp/stx-typescript";
 import { findRestingBuy } from "../src/helpers.ts";
@@ -12,7 +13,7 @@ import { findRestingBuy } from "../src/helpers.ts";
 const seconds = Number(process.argv[2] ?? 30);
 const client = new STX();
 
-const found = await findRestingBuy(client);
+const found = await findRestingBuy(client, { sport: process.env.SPORT });
 if (!found) {
   console.log("No open market to watch right now.");
   process.exit(0);

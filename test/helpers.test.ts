@@ -66,6 +66,18 @@ test("findRestingBuy walks pages and skips markets where the order would trade",
   assert.equal(requests[1]!.url.searchParams.get("cursor"), "page-2");
 });
 
+test("findRestingBuy passes a sport to the markets query", async () => {
+  const urls: URL[] = [];
+  const client = stubClient(async (input) => {
+    urls.push(new URL(input));
+    return json({ markets: [], cursor: null });
+  });
+  assert.equal(await findRestingBuy(client, { sport: "Football" }), null);
+  assert.equal(urls[0]!.searchParams.get("sports"), "Football");
+  await findRestingBuy(client);
+  assert.equal(urls[1]!.searchParams.has("sports"), false);
+});
+
 test("a 404 from balance() is an STXNotFoundException", async () => {
   const client = stubClient(async () => json({ error: "not found" }, 404));
   await assert.rejects(client.balance(), STXNotFoundException);

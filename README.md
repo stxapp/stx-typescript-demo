@@ -57,13 +57,15 @@ Philadelphia Eagles at Chicago Bears: NFL - Week 3 PHI @ CHI  bid -  offer -
 5 markets shown, more available.
 ```
 
-Prices are dollars per contract. A bid of `0.4200` on a market whose winning contract pays `1.0000` means a buyer will pay 42 cents for a contract that pays $1 if the Yankees score first. `-` means nobody is bidding or offering. On the Ontario demo exchange a winning contract pays `100.0000`, so prices there read like `42.0000`.
+Prices are dollars per contract. A bid of `0.4200` on a market whose winning contract pays `1.0000` means a buyer will pay 42 cents for a contract that pays $1 if the Yankees score first. `-` means nobody is bidding or offering. Some markets pay `100.0000` for a winning contract, so their prices read like `42.0000`. Each market's `max_price` says which.
 
 ### Place and cancel an order
 
 `npm run trade` places one buy order for 1 contract, reads it back, then cancels it. Code: [`examples/trade.ts`](examples/trade.ts).
 
-The price is 1% of what a winning contract pays, read from the market's `max_price` (one cent on a $1 contract), and the script only picks a market whose event has not started and where nobody is offering at that price or lower. The order rests on the book and does not trade, and the script cancels it before it exits.
+The price is 1% of what a winning contract pays, read from the market's `max_price` (one cent on a $1 contract, `1.00` on a $100 one), and the script only picks a market whose event has not started and where nobody is offering at that price or lower. The order rests on the book and does not trade, and the script cancels it before it exits.
+
+It uses the first such market it finds. To look only at one sport, set `SPORT`, for example `SPORT=Football npm run trade`. `npm run live` reads `SPORT` too, so the two scripts still watch the same market.
 
 ```text
 Market:  Philadelphia Eagles at Chicago Bears: NFL - Week 3 PHI @ CHI
@@ -74,14 +76,14 @@ Cancel:  34ac306f-bfe3-4431-9499-2fe0b7ffe283  cancelled
 Final:   status cancelled  filled 0.00
 ```
 
-On the Ontario demo exchange, where a winning contract pays `100.0000`, the same script buys at `1.00`:
+The same script on the Ontario demo exchange, run as `SPORT=Football npm run trade`:
 
 ```text
-Market:  Khamenei out as Supreme Leader of Iran: Khamenei out as Supreme Leader of Iran
-         AHC_2602241300__1  (a winning contract pays 100.0000)
-Placed:  buy 1 @ 1.00  id c239ef85-8c25-4b8d-96ff-e4b9be4b4362  status accepted
-Read:    status open  filled 0.00 of 1.00  client id demo-e696f586-f191-43b5-8a40-4bf646c510a4
-Cancel:  c239ef85-8c25-4b8d-96ff-e4b9be4b4362  cancelled
+Market:  Philadelphia Eagles at Chicago Bears: M. Lemon 26.5 Rec YDS
+         STXNFL-26SEP282015PHICHI-RECYDSCHIMLEMON545861-26.5  (a winning contract pays 1.0000)
+Placed:  buy 1 @ 0.01  id 8fb3cc5e-f8bd-42dd-af55-732cd7d044ae  status accepted
+Read:    status open  filled 0.00 of 1.00  client id demo-cf3be6cb-71f8-4cc0-8533-3c832651acbb
+Cancel:  8fb3cc5e-f8bd-42dd-af55-732cd7d044ae  cancelled
 Final:   status cancelled  filled 0.00
 ```
 

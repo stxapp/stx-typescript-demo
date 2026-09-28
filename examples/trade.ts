@@ -5,6 +5,7 @@
 // lower, so the order rests instead of trading. It needs a read_write API key.
 //
 // Run: npm run trade
+//      SPORT=Football npm run trade   (only look at markets in that sport)
 
 import { randomUUID } from "node:crypto";
 import { STX, STXRejectedException, STXValidationException } from "@stxapp/stx-typescript";
@@ -13,7 +14,7 @@ import { findRestingBuy } from "../src/helpers.ts";
 const client = new STX();
 
 // 1. Find a market that accepts orders, whose event has not started, and a price that will rest.
-const found = await findRestingBuy(client);
+const found = await findRestingBuy(client, { sport: process.env.SPORT });
 if (!found) {
   console.log("No open market right now where a small buy would rest. Try again later.");
   process.exit(0);
