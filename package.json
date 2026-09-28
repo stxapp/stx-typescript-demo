@@ -1,0 +1,27 @@
+{
+  "name": "stx-typescript-demo",
+  "version": "1.0.0",
+  "description": "Example scripts for trading on the STX exchange with the TypeScript SDK.",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "markets": "tsx examples/markets.ts",
+    "trade": "tsx examples/trade.ts",
+    "live": "tsx examples/live.ts",
+    "portfolio": "tsx examples/portfolio.ts",
+    "typecheck": "tsc",
+    "test": "tsx --test test/helpers.test.ts"
+  },
+  "dependencies": {
+    "@stxapp/stx-typescript": "^0.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.130",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
