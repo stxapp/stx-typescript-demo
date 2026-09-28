@@ -26,7 +26,8 @@ console.log(`         ${market.symbol}  (a winning contract pays ${market.max_pr
 // 2. Place the order. clientOrderId is your own id: use it to find the order again
 //    if the call fails without an answer, instead of placing it twice.
 const clientOrderId = `demo-${randomUUID()}`;
-let orderId: string;
+let orderId: string | undefined;
+let refused = false;
 try {
   const order = await client.placeOrder(marketId, "buy", "limit", {
     price, // a dollar string with whole cents, e.g. "0.01"
@@ -35,25 +36,32 @@ try {
   });
   orderId = order.id!;
   console.log(`Placed:  buy 1 @ ${price}  id ${orderId}  status ${order.status}`);
-} catch (err) {
-  // The exchange explains why it refused the order, e.g. a read_only key or a market that just paused.
-  if (err instanceof STXRejectedException || err instanceof STXValidationException) {
-    console.error(`Order refused (${err.statusCode}): ${err.message}`);
-    process.exit(1);
-  }
-  throw err;
-}
 
-try {
   // 3. Read it back. The order is on the book and has not filled.
   const open = await client.order(orderId);
   console.log(`Read:    status ${open.status}  filled ${open.filled} of ${open.quantity}  client id ${open.client_order_id}`);
+} catch (err) {
+  // The exchange explains why it refused the order, e.g. a read_only key or a market that just paused.
+  if (!(err instanceof STXRejectedException || err instanceof STXValidationException)) throw err;
+  refused = orderId === undefined;
+  console.error(`Order refused (${err.statusCode}): ${err.message}`);
+  process.exitCode = 1;
 } finally {
-  // 4. Cancel it, even if reading it back failed.
-  const cancellation = await client.cancelOrder(orderId);
-  console.log(`Cancel:  ${cancellation.order_id}  ${cancellation.status}`);
+  // 4. Cancel it, whatever happened above. If placing failed without an answer
+  //    the order may still exist, so look it up by clientOrderId first.
+  if (orderId === undefined && !refused) {
+    const found = await client.orders({ clientOrderIds: [clientOrderId] });
+    orderId = found.at(0)?.id ?? undefined;
+  }
+  if (orderId !== undefined) {
+    const cancellation = await client.cancelOrder(orderId);
+    console.log(`Cancel:  ${cancellation.order_id}  ${cancellation.status}`);
+  }
 }
 
 // 5. Confirm the final state.
-const done = await client.order(orderId);
-console.log(`Final:   status ${done.status}  filled ${done.filled}`);
+if (orderId !== undefined) {
+  const done = await client.order(orderId);
+  console.log(`Final:   status ${done.status}  filled ${done.filled}`);
+  if (done.status !== "cancelled") process.exitCode = 1;
+}

@@ -41,7 +41,7 @@ The scripts never print your key.
 
 ## Examples
 
-Each script is in [`examples/`](examples/) and runs with one command. The sample output below comes from a demo exchange; yours will show the markets open when you run it.
+Each script is in [`examples/`](examples/) and runs with one command. The sample output below comes from the US demo exchange (`region = us`, `env = demo`), and from the Ontario demo exchange (`region = ontario`, `env = demo`) where noted. Yours will show the markets open when you run it.
 
 ### List markets
 
@@ -52,12 +52,12 @@ New York Yankees at San Diego Padres: Padres First Run  bid -  offer -
 New York Yankees at San Diego Padres: Yankees First Run  bid 0.4200  offer -
 Norfolk State Spartans at Old Dominion Monarchs: Old Dominion Score Last  bid -  offer -
 Norfolk State Spartans at Old Dominion Monarchs: Norfolk St Score Last  bid -  offer -
-Washington Mystics at Atlanta Dream: WNBA Playoff WSH @ ATL  bid -  offer -
+Philadelphia Eagles at Chicago Bears: NFL - Week 3 PHI @ CHI  bid -  offer -
 
 5 markets shown, more available.
 ```
 
-Prices are dollars per contract. A bid of `0.4200` on a market whose winning contract pays `1.0000` means a buyer will pay 42 cents for a contract that pays $1 if the Yankees score first. `-` means nobody is bidding or offering.
+Prices are dollars per contract. A bid of `0.4200` on a market whose winning contract pays `1.0000` means a buyer will pay 42 cents for a contract that pays $1 if the Yankees score first. `-` means nobody is bidding or offering. On the Ontario demo exchange a winning contract pays `100.0000`, so prices there read like `42.0000`.
 
 ### Place and cancel an order
 
@@ -66,39 +66,48 @@ Prices are dollars per contract. A bid of `0.4200` on a market whose winning con
 The price is 1% of what a winning contract pays, read from the market's `max_price` (one cent on a $1 contract), and the script only picks a market whose event has not started and where nobody is offering at that price or lower. The order rests on the book and does not trade, and the script cancels it before it exits.
 
 ```text
-Market:  Dallas Wings at Golden State Valkyries: WNBA Playoff DAL @ GS
-         STXWNBA-26SEP272100DALGS-GAMEGS  (a winning contract pays 1.0000)
-Placed:  buy 1 @ 0.01  id bfb36d01-e79c-4841-86fa-26d68ffe0f4b  status accepted
-Read:    status open  filled 0.00 of 1.00  client id demo-97c7ef28-43a7-45c9-86ff-b2bae6456992
-Cancel:  bfb36d01-e79c-4841-86fa-26d68ffe0f4b  cancelled
+Market:  Philadelphia Eagles at Chicago Bears: NFL - Week 3 PHI @ CHI
+         STXNFL-26SEP282015PHICHI-GAMECHI  (a winning contract pays 1.0000)
+Placed:  buy 1 @ 0.01  id 34ac306f-bfe3-4431-9499-2fe0b7ffe283  status accepted
+Read:    status open  filled 0.00 of 1.00  client id demo-4553bc76-afd2-4e58-b3a3-138b7301312e
+Cancel:  34ac306f-bfe3-4431-9499-2fe0b7ffe283  cancelled
 Final:   status cancelled  filled 0.00
 ```
 
-The order carries a `clientOrderId`, your own id for it. If a call to place an order fails without an answer, look the order up by that id before placing it again; [Trading](https://docs.stxapp.io/sdks/typescript/trading/) explains why.
+On the Ontario demo exchange, where a winning contract pays `100.0000`, the same script buys at `1.00`:
+
+```text
+Market:  Khamenei out as Supreme Leader of Iran: Khamenei out as Supreme Leader of Iran
+         AHC_2602241300__1  (a winning contract pays 100.0000)
+Placed:  buy 1 @ 1.00  id c239ef85-8c25-4b8d-96ff-e4b9be4b4362  status accepted
+Read:    status open  filled 0.00 of 1.00  client id demo-e696f586-f191-43b5-8a40-4bf646c510a4
+Cancel:  c239ef85-8c25-4b8d-96ff-e4b9be4b4362  cancelled
+Final:   status cancelled  filled 0.00
+```
+
+The order carries a `clientOrderId`, your own id for it. If a call to place an order fails without an answer, look the order up by that id before placing it again; [Trading](https://docs.stxapp.io/sdks/typescript/trading/) explains why. The script does that lookup before it cancels, and it cancels whatever happens after the order is sent, so it never leaves an order on the book. It exits non-zero if the order is refused or does not end cancelled.
 
 ### Stream prices and your account
 
-`npm run live` opens one WebSocket, streams the order book of the market `npm run trade` uses together with your live account (balance, open orders, fills and positions), and exits after 30 seconds. `npm run live -- 60` streams for 60. Code: [`examples/live.ts`](examples/live.ts).
+`npm run live` opens one WebSocket, streams the order book of the market `npm run trade` uses together with your live account (balance, open orders, fills and positions), and exits after 30 seconds. `npm run live -- 60` streams for 60; the run below used `npm run live -- 25`. Code: [`examples/live.ts`](examples/live.ts).
 
 Run `npm run trade` in a second terminal while it streams to see the order arrive on the book and on your account, and leave both when it is cancelled:
 
 ```text
-Watching Dallas Wings at Golden State Valkyries: WNBA Playoff DAL @ GS
+Watching Philadelphia Eagles at Chicago Bears: NFL - Week 3 PHI @ CHI
 [book]    best bid -  best offer -  (starting snapshot)
 [account] available 10019999.6400  open orders 0  positions 0
 
-Streaming for 30 s. Run npm run trade in another terminal to see an order come and go.
+Streaming for 25 s. Run npm run trade in another terminal to see an order come and go.
 
 [account] positions 1 updated
 [account] order buy 1.00 @ 0.0100  open  filled 0.00
-[account] balance available 10019999.6400
 [account] order buy 1.00 @ 0.0100  cancelled  filled 0.00
 [account] positions 1 updated
 [book]    best bid 1.00 @ 0.0100  best offer -
 [account] positions 1 updated
 [account] order buy 1.00 @ 0.0100  cancelled  filled 0.00
 [book]    best bid -  best offer -
-[account] balance available 10019999.6400
 
 Closed. Open orders now: 0
 ```
@@ -107,25 +116,28 @@ The client signs the connection, sends heartbeats and reconnects for you. The ch
 
 ### Read your portfolio
 
-`npm run portfolio` prints your key's scope, balance, positions, open orders and recent fills. Code: [`examples/portfolio.ts`](examples/portfolio.ts).
+`npm run portfolio` prints your key's scope, balance, open positions, open orders and recent fills. Code: [`examples/portfolio.ts`](examples/portfolio.ts). This run is from the Ontario demo exchange.
 
 ```text
 Key scope: read_write
 
-Balance: not available on this exchange yet; npm run live shows it from the WebSocket.
-Positions: not available on this exchange yet; npm run live shows it from the WebSocket.
+Balance: 2000030.2400  available 1999809.2400
+
+Open positions: 2
+  7bc6876f-2c29-41c0-b8f5-c19717e380e0  11.00
+  affabdfe-fd72-44c0-88a9-32245c8030bb  1.00
 
 Open orders: 0
 
 Recent fills: 5
-  ee99086e-99b0-4f95-99bc-c93fd1a50118  buy 2.00 @ 0.3600
-  5635f7a3-4ef5-417d-9123-b05e11d4307f  buy 1.00 @ 0.4500
-  8868999f-f0dc-4278-9b95-2421b50d2c1f  buy 1.00 @ 0.4500
-  e82a9a02-fda1-4cc4-ba66-d154581ae290  buy 5.00 @ 0.1000
-  7a6e8526-8691-4efa-88e0-8eb7e91fe9c1  sell 1.00 @ 0.6000
+  03b72898-2652-4ab2-a6d8-874e070cb215  buy 2.00 @ 0.5000
+  79218d15-841b-4873-91be-fed5569c6b62  buy 2.00 @ 0.5500
+  5c580312-3dc1-4f9e-8fa4-b3620f7006bb  buy 2.00 @ 0.4600
+  e4ce8faa-e2e9-4787-ac0c-d4cc43374205  buy 2.00 @ 0.5000
+  4ecd1451-7b00-4049-9ab5-e164031ef92e  buy 2.00 @ 0.5500
 ```
 
-Reading the balance and positions this way is not yet available on every exchange. Where it is not, the SDK throws `STXNotFoundException` and the script says so; the live account view in `npm run live` has both.
+`positions()` also returns markets you have traded out of, with a position of `0.00`; the script leaves those out. `npm run live` shows the same balance and positions as they change.
 
 ## Tests
 
@@ -135,6 +147,8 @@ npm test
 ```
 
 The tests stub `fetch`, so they need no API key and make no network calls.
+
+The [Live](.github/workflows/live.yml) workflow also runs every example against the US and Ontario demo exchanges on each push to `main` and once a day.
 
 ## Building an app for other STX members?
 

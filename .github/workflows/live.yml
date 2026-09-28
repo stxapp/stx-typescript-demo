@@ -1,0 +1,91 @@
+name: Live
+
+# Runs every example against the public demo exchanges, selected with
+# STX_REGION and STX_ENV exactly as a customer would. The trade example places
+# one 1% buy that rests on the book and cancels it before it exits.
+#
+# Needs these repository secrets (read_write API keys, the PEM as text):
+#   US_DEMO_API_KEY_ID, US_DEMO_API_KEY_PEM            (region us, env demo)
+#   ONTARIO_DEMO_API_KEY_ID, ONTARIO_DEMO_API_KEY_PEM  (region ontario, env demo)
+#
+# Never runs on pull requests, so the secrets are not exposed to them.
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: us-demo
+            prefix: US_DEMO
+            region: us
+            env: demo
+          - name: ontario-demo
+            prefix: ONTARIO_DEMO
+            region: ontario
+            env: demo
+    name: live (${{ matrix.name }})
+    env:
+      STX_REGION: ${{ matrix.region }}
+      STX_ENV: ${{ matrix.env }}
+      STX_KEY_ID: ${{ secrets[format('{0}_API_KEY_ID', matrix.prefix)] }}
+      STX_PRIVATE_KEY: ${{ secrets[format('{0}_API_KEY_PEM', matrix.prefix)] }}
+    steps:
+      - name: Require an API key
+        run: |
+          if [ -z "$STX_KEY_ID" ] || [ -z "$STX_PRIVATE_KEY" ]; then
+            echo "::error::Secrets ${{ matrix.prefix }}_API_KEY_ID and ${{ matrix.prefix }}_API_KEY_PEM must be set to run the examples on ${{ matrix.name }}."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+      - name: npm run markets
+        run: |
+          set -o pipefail
+          npm run -s markets | tee markets.log
+          grep -q 'markets shown' markets.log || { echo "::error::markets printed no summary on ${{ matrix.name }}"; exit 1; }
+
+      - name: npm run trade
+        run: |
+          set -o pipefail
+          npm run -s trade | tee trade.log
+          grep -q '^Placed: ' trade.log || { echo "::error::trade placed no order on ${{ matrix.name }}"; exit 1; }
+          grep -q '^Final:   status cancelled' trade.log || { echo "::error::trade did not end with its order cancelled on ${{ matrix.name }}"; exit 1; }
+
+      - name: npm run live
+        run: |
+          set -o pipefail
+          npm run -s live -- 10 | tee live.log
+          grep -q '^\[account\] available ' live.log || { echo "::error::live received no account snapshot on ${{ matrix.name }}"; exit 1; }
+          grep -q '^Closed\. ' live.log || { echo "::error::live did not close cleanly on ${{ matrix.name }}"; exit 1; }
+
+      - name: npm run portfolio
+        run: |
+          set -o pipefail
+          npm run -s portfolio | tee portfolio.log
+          grep -q '^Balance: ' portfolio.log || { echo "::error::portfolio printed no balance on ${{ matrix.name }}"; exit 1; }
+          # A warning, not a failure: other clients may share this account.
+          grep -q '^Open orders: 0' portfolio.log || echo "::warning::the account on ${{ matrix.name }} has open orders after the run"
