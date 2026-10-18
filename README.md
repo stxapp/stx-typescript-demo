@@ -164,4 +164,4 @@ Everything above trades your own account with your own API key. OAuth is only ne
 - [API reference](https://docs.stxapp.io/sdks/typescript/reference/)
 - [Support](https://docs.stxapp.io/support/)
 
-MIT license. Use of the STX API and exchange is subject to the STX terms of use and privacy policy: United States ([terms of use](https://config.stxapp.io/us/terms_of_use.pdf), [privacy policy](https://config.stxapp.io/us/privacy_policy.pdf)), Ontario ([terms of use](https://config.stxapp.ca/on/terms-of-use.pdf), [privacy policy](https://config.stxapp.ca/on/privacy-policy.pdf)).
+MIT license. Use of the STX API and exchange is subject to the STX terms of use and privacy policy: United States ([terms of use](https://stxapp.io/legal/terms-of-use.pdf), [privacy policy](https://stxapp.io/legal/privacy-policy.pdf)), Ontario ([terms of use](https://stxapp.ca/legal/terms-of-use.pdf), [privacy policy](https://stxapp.ca/legal/privacy-policy.pdf)).
