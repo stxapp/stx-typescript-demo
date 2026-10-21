@@ -17,9 +17,13 @@ import {
   type Market,
 } from "@stxapp/stx-typescript";
 import {
+  bestBid,
+  bestLevel,
+  bestOffer,
   cashOutWhenHeld,
   comboStake,
   findRestingBuy,
+  isUpcoming,
   pickComboLegs,
   restingBuyPrice,
   takeBestQuote,
@@ -50,9 +54,52 @@ test("wouldRest compares against the best offer", () => {
   assert.equal(wouldRest(market(), "0.01"), true);
   assert.equal(wouldRest(market("0.4200"), "0.01"), true);
   assert.equal(wouldRest(market("0.0100"), "0.01"), false);
+  // REST lists offers highest first: the one-cent offer at the end is the best.
+  const rest: Market = { offers: [{ price: "0.6000", quantity: "5.00" }, { price: "0.0100", quantity: "1.00" }] };
+  assert.equal(wouldRest(rest, "0.01"), false);
+});
+
+test("the best bid is the highest and the best offer the lowest, in any order", () => {
+  // As REST sends them: both sides highest price first.
+  const rest: Market = {
+    bids: [{ price: "0.4800", quantity: "625.00" }, { price: "0.4700", quantity: "1063.00" }],
+    offers: [{ price: "0.6000", quantity: "3000.00" }, { price: "0.5300", quantity: "638.00" }],
+  };
+  assert.equal(bestBid(rest), "0.4800");
+  assert.equal(bestOffer(rest), "0.5300");
+  // As the orderbook channel sends offers: lowest first.
+  assert.equal(bestLevel([{ price: "0.5300" }, { price: "0.6000" }], "offer")?.price, "0.5300");
+  assert.equal(bestBid({ bids: [] }), "-");
+  assert.equal(bestOffer({}), "-");
+});
+
+test("isUpcoming needs a scheduled event whose start is still ahead", () => {
+  const now = new Date("2026-10-21T06:00:00Z");
+  assert.equal(isUpcoming({ event_status: "scheduled", event_start: "2026-10-21T19:00:00Z" }, now), true);
+  assert.equal(isUpcoming({ event_start: "2026-10-21T19:00:00Z" }, now), true); // no status given
+  // Still marked scheduled, but its start time has passed: stale.
+  assert.equal(isUpcoming({ event_status: "scheduled", event_start: "2026-10-19T00:00:00Z" }, now), false);
+  assert.equal(isUpcoming({ event_status: "in_progress", event_start: "2026-10-21T19:00:00Z" }, now), false);
+  assert.equal(isUpcoming({ event_status: "scheduled" }, now), false); // no start time
+});
+
+test("findRestingBuy skips a stale market whose start has passed and picks an upcoming one", async () => {
+  const client = stubClient(async () =>
+    json({
+      markets: [
+        // Open and still marked scheduled, but the game started two days ago and nobody quotes it.
+        { market_id: "stale", max_price: "1.0000", event_status: "scheduled", event_start: "2026-10-19T00:00:00Z", offers: [] },
+        { market_id: "next", max_price: "1.0000", event_status: "scheduled", event_start: "2026-10-21T19:00:00Z", offers: [{ price: "0.3600", quantity: "50.00" }] },
+      ],
+      cursor: null,
+    }),
+  );
+  const found = await findRestingBuy(client, { now: new Date("2026-10-21T06:00:00Z") });
+  assert.equal(found?.market.market_id, "next");
 });
 
 test("findRestingBuy walks pages and skips markets where the order would trade", async () => {
+  const future = "2026-10-22T23:00:00.000000Z";
   const requests: { url: URL; headers: Headers }[] = [];
   const client = stubClient(async (input, init) => {
     const url = new URL(input);
@@ -61,20 +108,20 @@ test("findRestingBuy walks pages and skips markets where the order would trade",
       return json({
         markets: [
           // Someone offers at one cent, so a one-cent buy would trade: skipped.
-          { market_id: "m1", max_price: "1.0000", event_status: "scheduled", offers: [{ price: "0.0100", quantity: "3.00" }] },
+          { market_id: "m1", max_price: "1.0000", event_status: "scheduled", event_start: future, offers: [{ price: "0.0100", quantity: "3.00" }] },
           // The event has started: skipped.
-          { market_id: "m2", max_price: "1.0000", event_status: "live", offers: [] },
+          { market_id: "m2", max_price: "1.0000", event_status: "live", event_start: future, offers: [] },
         ],
         cursor: "page-2",
       });
     }
     return json({
-      markets: [{ market_id: "m3", max_price: "100.0000", event_status: "scheduled", offers: [{ price: "40.0000", quantity: "1.00" }] }],
+      markets: [{ market_id: "m3", max_price: "100.0000", event_status: "scheduled", event_start: future, offers: [{ price: "40.0000", quantity: "1.00" }] }],
       cursor: null,
     });
   });
 
-  const found = await findRestingBuy(client);
+  const found = await findRestingBuy(client, { now: new Date("2026-10-21T00:00:00Z") });
   assert.equal(found?.market.market_id, "m3");
   assert.equal(found?.price, "1.00");
 

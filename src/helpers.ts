@@ -12,14 +12,44 @@ import {
   type STX,
 } from "@stxapp/stx-typescript";
 
+/** One price level of a book, as REST markets and the orderbook channel send it. */
+export type Level = { price?: string | null; quantity?: string | null };
+
+/**
+ * The best level on one side of a book: the highest bid, or the lowest offer.
+ * Picks by price rather than position, because REST lists offers highest
+ * first while the orderbook channel lists them lowest first.
+ */
+export function bestLevel(levels: readonly Level[] | null | undefined, side: "bid" | "offer"): Level | undefined {
+  let best: Level | undefined;
+  for (const level of levels ?? []) {
+    if (level.price == null) continue;
+    const price = Number(level.price);
+    if (!best || (side === "bid" ? price > Number(best.price) : price < Number(best.price))) best = level;
+  }
+  return best;
+}
+
 /** The best bid price as a string, or "-" when nobody is bidding. */
 export function bestBid(market: Market): string {
-  return market.bids?.[0]?.price ?? "-";
+  return bestLevel(market.bids, "bid")?.price ?? "-";
 }
 
 /** The best offer price as a string, or "-" when nobody is offering. */
 export function bestOffer(market: Market): string {
-  return market.offers?.[0]?.price ?? "-";
+  return bestLevel(market.offers, "offer")?.price ?? "-";
+}
+
+/**
+ * True when the market's event is still to come: not started, finished or
+ * cancelled, and with a start time after `now`. An open market can belong to
+ * an event whose start has passed but whose status was never moved on, and
+ * nobody quotes those.
+ */
+export function isUpcoming(market: Market, now: Date = new Date()): boolean {
+  if (market.event_status && market.event_status !== "scheduled") return false;
+  const start = market.event_start ? Date.parse(market.event_start) : NaN;
+  return start > now.getTime();
 }
 
 /** A one-line description of a market: event, market title, best bid and offer. */
@@ -57,26 +87,25 @@ export function restingBuyPrice(maxPrice: string): string {
  * nobody is offering, or the best offer is above `price`.
  */
 export function wouldRest(market: Market, price: string): boolean {
-  const offer = market.offers?.[0]?.price;
+  const offer = bestLevel(market.offers, "offer")?.price;
   return offer == null || toCents(offer) > toCents(price);
 }
 
 /**
- * The first open market that is accepting orders, whose event has not
- * started, and where a buy at restingBuyPrice() would rest. Returns the
+ * The first open market that is accepting orders, whose event is upcoming
+ * (see isUpcoming), and where a buy at restingBuyPrice() would rest. Returns the
  * market and that price, or null when none of the first `scan` markets fit.
  * Pass `sport` (e.g. "Football") to look only at markets in that sport.
  */
 export async function findRestingBuy(
   client: STX,
-  { sport, scan = 200 }: { sport?: string; scan?: number } = {},
+  { sport, scan = 200, now = new Date() }: { sport?: string; scan?: number; now?: Date } = {},
 ): Promise<{ market: Market; price: string } | null> {
   let seen = 0;
   const query = { status: "open", trading: true, ...(sport ? { sports: [sport] } : {}) } as const;
   for await (const market of client.iterMarkets(query)) {
     if (++seen > scan) break;
-    if (!market.market_id || !market.max_price) continue;
-    if (market.event_status && market.event_status !== "scheduled") continue;
+    if (!market.market_id || !market.max_price || !isUpcoming(market, now)) continue;
     const price = restingBuyPrice(market.max_price);
     if (wouldRest(market, price)) return { market, price };
   }
@@ -118,8 +147,7 @@ export async function pickComboLegs(
   for await (const market of client.iterMarkets(query)) {
     if (++seen > scan || legs.length >= count) break;
     if (!market.market_id || market.archived || market.event_type === "combo") continue;
-    if (market.event_status && market.event_status !== "scheduled") continue;
-    if (market.event_start && Date.parse(market.event_start) <= now.getTime()) continue;
+    if (!isUpcoming(market, now)) continue;
     const event = market.event_id ?? market.market_id;
     if (events.has(event)) continue;
     events.add(event);

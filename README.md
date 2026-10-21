@@ -47,19 +47,19 @@ Each script is in [`examples/`](examples/) and runs with one command. The sample
 
 ### List markets
 
-`npm run markets` lists markets that are open and accepting orders, with the best bid and offer on each. Code: [`examples/markets.ts`](examples/markets.ts).
+`npm run markets` lists the first five markets that are open and accepting orders and whose event has not started yet, with the best bid (highest) and best offer (lowest) on each. Code: [`examples/markets.ts`](examples/markets.ts).
 
 ```text
-New York Yankees at San Diego Padres: Padres First Run  bid -  offer -
-New York Yankees at San Diego Padres: Yankees First Run  bid 0.4200  offer -
-Norfolk State Spartans at Old Dominion Monarchs: Old Dominion Score Last  bid -  offer -
-Norfolk State Spartans at Old Dominion Monarchs: Norfolk St Score Last  bid -  offer -
-Philadelphia Eagles at Chicago Bears: NFL - Week 3 PHI @ CHI  bid -  offer -
+Manchester United at Como: UEFA MAN @ COMO Draw 1st Half  bid 0.3100  offer 0.3600
+Galatasaray at Lille: UEFA GAL @ LILL Draw 1st Half  bid 0.3100  offer 0.3600
+Galatasaray at Lille: UEFA GAL @ LILL - GAL in Regulation  bid 0.3100  offer 0.3600
+Galatasaray at Lille: UEFA GAL @ LILL - LILL 1st Half  bid 0.3100  offer 0.3600
+Manchester United at Como: UEFA MAN @ COMO Draw  bid 0.3100  offer 0.3600
 
-5 markets shown, more available.
+5 upcoming markets shown.
 ```
 
-Prices are dollars per contract. A bid of `0.4200` on a market whose winning contract pays `1.0000` means a buyer will pay 42 cents for a contract that pays $1 if the Yankees score first. `-` means nobody is bidding or offering. Some markets pay `100.0000` for a winning contract, so their prices read like `42.0000`. Each market's `max_price` says which.
+Prices are dollars per contract. A bid of `0.3100` on a market whose winning contract pays `1.0000` means a buyer will pay 31 cents for a contract that pays $1 if the first half is a draw, and an offer of `0.3600` means a seller will take 36 cents for it. `-` means nobody is bidding or offering. Some markets pay `100.0000` for a winning contract, so their prices read like `42.0000`. Each market's `max_price` says which.
 
 ### Place and cancel an order
 
@@ -70,11 +70,11 @@ The price is 1% of what a winning contract pays, read from the market's `max_pri
 It uses the first such market it finds. To look only at one sport, set `SPORT`, for example `SPORT=Football npm run trade`. `npm run live` reads `SPORT` too, so the two scripts still watch the same market.
 
 ```text
-Market:  Philadelphia Eagles at Chicago Bears: NFL - Week 3 PHI @ CHI
-         STXNFL-26SEP282015PHICHI-GAMECHI  (a winning contract pays 1.0000)
-Placed:  buy 1 @ 0.01  id 34ac306f-bfe3-4431-9499-2fe0b7ffe283  status accepted
-Read:    status open  filled 0.00 of 1.00  client id demo-4553bc76-afd2-4e58-b3a3-138b7301312e
-Cancel:  34ac306f-bfe3-4431-9499-2fe0b7ffe283  cancelled
+Market:  Manchester United at Como: UEFA MAN @ COMO Draw 1st Half
+         STXUEFA-26OCT211245MANCOMO-R1DRAWMANCOMO  (a winning contract pays 1.0000)
+Placed:  buy 1 @ 0.01  id 75a2dc33-db8d-48ca-9818-551fb8be6fcd  status accepted
+Read:    status open  filled 0.00 of 1.00  client id demo-d340766b-4fde-45c6-9f7e-42a8524898c6
+Cancel:  75a2dc33-db8d-48ca-9818-551fb8be6fcd  cancelled
 Final:   status cancelled  filled 0.00
 ```
 
@@ -93,25 +93,26 @@ The order carries a `clientOrderId`, your own id for it. If a call to place an o
 
 ### Stream prices and your account
 
-`npm run live` opens one WebSocket, streams the order book of the market `npm run trade` uses together with your live account (balance, open orders, fills and positions), and exits after 30 seconds. `npm run live -- 60` streams for 60; the run below used `npm run live -- 25`. Code: [`examples/live.ts`](examples/live.ts).
+`npm run live` opens one WebSocket, streams the order book of the market `npm run trade` uses together with your live account (balance, open orders, fills and positions), and exits after 30 seconds. `npm run live -- 60` streams for 60; the run below used `npm run live -- 20`. Code: [`examples/live.ts`](examples/live.ts).
 
-Run `npm run trade` in a second terminal while it streams to see the order arrive on the book and on your account, and leave both when it is cancelled:
+Run `npm run trade` in a second terminal while it streams to see the order arrive on the book and on your account, and leave both when it is cancelled. Each `[book]` line shows the top of the book, so the one-cent order, below the best bid, arrives as a new push without changing the line:
 
 ```text
-Watching Philadelphia Eagles at Chicago Bears: NFL - Week 3 PHI @ CHI
-[book]    best bid -  best offer -  (starting snapshot)
-[account] available 10019999.6400  open orders 0  positions 0
+Watching Manchester United at Como: UEFA MAN @ COMO Draw 1st Half
+[book]    best bid 50.00 @ 0.3100  best offer 50.00 @ 0.3600  (starting snapshot)
+[book]    best bid 50.00 @ 0.3100  best offer 50.00 @ 0.3600
+[account] available 100000.0000  open orders 0  positions 0
 
-Streaming for 25 s. Run npm run trade in another terminal to see an order come and go.
+Streaming for 20 s. Run npm run trade in another terminal to see an order come and go.
 
 [account] positions 1 updated
 [account] order buy 1.00 @ 0.0100  open  filled 0.00
+[book]    best bid 50.00 @ 0.3100  best offer 50.00 @ 0.3600
 [account] order buy 1.00 @ 0.0100  cancelled  filled 0.00
 [account] positions 1 updated
-[book]    best bid 1.00 @ 0.0100  best offer -
 [account] positions 1 updated
 [account] order buy 1.00 @ 0.0100  cancelled  filled 0.00
-[book]    best bid -  best offer -
+[book]    best bid 50.00 @ 0.3100  best offer 50.00 @ 0.3600
 
 Closed. Open orders now: 0
 ```
