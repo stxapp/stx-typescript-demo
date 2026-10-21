@@ -200,6 +200,20 @@ test("takeBestQuote takes the live best when the price moved", async () => {
   ]);
 });
 
+test("takeBestQuote reports a refused accept as closed, with the reason", async () => {
+  const player = fakePlayer([best("r1", "q1", "1.7900")], async () => {
+    throw new STXComboRefusedException("accept on rfq:u1 refused: player_refused:nothing_to_sell", {
+      command: "accept",
+      code: "player_refused",
+      detail: "nothing_to_sell",
+    });
+  });
+  assert.deepEqual(await takeBestQuote(player, "r1", { timeoutMs: 1000 }), {
+    kind: "closed",
+    reason: "player_refused (nothing_to_sell)",
+  });
+});
+
 test("takeBestQuote reports no quote, and a request that closed", async () => {
   assert.deepEqual(await takeBestQuote(fakePlayer([], async () => placement), "r1", { timeoutMs: 1000 }), {
     kind: "no_quote",
