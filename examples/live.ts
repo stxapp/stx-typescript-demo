@@ -8,7 +8,7 @@
 //      SPORT=Football npm run live   (watch a market in that sport, as trade does)
 
 import { STX, type AccountChange } from "@stxapp/stx-typescript";
-import { findRestingBuy } from "../src/helpers.ts";
+import { bestLevel, findRestingBuy, type Level } from "../src/helpers.ts";
 
 const seconds = Number(process.argv[2] ?? 30);
 const client = new STX();
@@ -21,11 +21,14 @@ if (!found) {
 const { market } = found;
 const marketId = market.market_id!;
 
-type Level = { price?: string | null; quantity?: string | null };
-const top = (levels?: Level[] | null) => (levels?.[0] ? `${levels[0].quantity} @ ${levels[0].price}` : "-");
+// The best bid is the highest price and the best offer the lowest, whatever order the levels arrive in.
+function top(levels: Level[] | null | undefined, side: "bid" | "offer"): string {
+  const best = bestLevel(levels, side);
+  return best ? `${best.quantity} @ ${best.price}` : "-";
+}
 
 console.log(`Watching ${market.event_title}: ${market.title}`);
-console.log(`[book]    best bid ${top(market.bids)}  best offer ${top(market.offers)}  (starting snapshot)`);
+console.log(`[book]    best bid ${top(market.bids, "bid")}  best offer ${top(market.offers, "offer")}  (starting snapshot)`);
 
 // One signed socket carries every channel. The client sends heartbeats and reconnects for you.
 const ws = await client.websocket().connect();
@@ -33,7 +36,7 @@ const ws = await client.websocket().connect();
 // The order book channel pushes the market's whole book each time it changes.
 await ws.orderbook([marketId], {
   onMessage: (msg) => {
-    if (msg.event === "book") console.log(`[book]    best bid ${top(msg.payload.bids)}  best offer ${top(msg.payload.offers)}`);
+    if (msg.event === "book") console.log(`[book]    best bid ${top(msg.payload.bids, "bid")}  best offer ${top(msg.payload.offers, "offer")}`);
   },
 });
 
