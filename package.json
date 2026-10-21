@@ -18,7 +18,7 @@
     "test": "tsx --test test/helpers.test.ts"
   },
   "dependencies": {
-    "@stxapp/stx-typescript": "^0.8.3"
+    "@stxapp/stx-typescript": "^0.9.0"
   },
   "devDependencies": {
     "@types/node": "^18.19.130",
