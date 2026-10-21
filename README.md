@@ -2,7 +2,7 @@
 
 [![Live](https://github.com/stxapp/stx-typescript-demo/actions/workflows/live.yml/badge.svg)](https://github.com/stxapp/stx-typescript-demo/actions/workflows/live.yml) [![CI](https://github.com/stxapp/stx-typescript-demo/actions/workflows/ci.yml/badge.svg)](https://github.com/stxapp/stx-typescript-demo/actions/workflows/ci.yml)
 
-Small, commented scripts that list markets, place and cancel an order, stream live prices and your account, and read your portfolio on the [STX](https://stxapp.io) exchange, using the [`@stxapp/stx-typescript`](https://www.npmjs.com/package/@stxapp/stx-typescript) SDK.
+Small, commented scripts that list markets, place and cancel an order, stream live prices and your account, buy and cash out a combo, and read your portfolio on the [STX](https://stxapp.io) exchange, using the [`@stxapp/stx-typescript`](https://www.npmjs.com/package/@stxapp/stx-typescript) SDK.
 
 ## Before you start
 
@@ -118,6 +118,32 @@ Closed. Open orders now: 0
 
 The client signs the connection, sends heartbeats and reconnects for you. The channels and their payloads are described under [WebSockets](https://docs.stxapp.io/sdks/typescript/websockets/).
 
+### Buy and cash out a combo
+
+`npm run combos` buys a small combo as a player and then cashes it out, so the run ends holding nothing. Code: [`examples/combos.ts`](examples/combos.ts). Combos run on the US demo exchange (`region = us`, `env = demo`); on any other exchange the script says so and exits.
+
+A combo is one market over two or more legs, and it pays only if every leg wins. The script picks two open markets from different events that have not started, asks makers to quote on a stake of `2.00`, prints each quote as it arrives (what you would win on that stake), and accepts the best one at its exact amount. The exchange then places your order on the combo's own market. The script cashes out the same way: it asks makers what they pay for everything you hold, accepts the best quote, and checks your position is back to zero.
+
+It waits up to 20 seconds for each quote and says so if none arrives; `npm run combos -- 60` waits up to 60. Set the stake and number of legs with `STAKE=5 LEGS=3 npm run combos`, and look only at one sport with `SPORT=Football npm run combos`.
+
+```text
+Leg 1:   Will the game between the Como and the Manchester United end in a draw in the 1st Half?  (MAN @ COMO 1H)
+Leg 2:   Will the game between the Lille and the Galatasaray end in a draw in the 1st Half?  (GAL @ LILL 1H)
+
+Request: 14f53ace-e3a8-41ca-9d50-146fb970b878  stake 2.00
+Waiting up to 20 s for a quote...
+[quote]  win 3.0000 on a 2.00 stake  (quote 17ff4c80-4b0f-4b06-9850-b03cdbf91938)
+Bought:  5.00 @ 0.4000  order 47855711-954e-459e-b184-b5e1a4d814f0  (accepted win 3.0000)
+         combo 4582dc69-296c-4ce3-911c-5314b00b93f7  Won / Won  (a winning contract pays 1.0000)
+
+Cash out: 998e4c05-9ce7-4ec3-84c6-6d4161bf1249  selling 5.00
+[quote]  pays 1.7500 for all 5.00  (quote dce53d23-3cf3-4d8e-8e66-3a4ce666af33)
+Sold:    5.00 @ 0.3500  order 069dc95f-f275-4183-a1de-0011bc774a23  (accepted 1.7500)
+Final:   position 0.00 on the combo  open orders 0
+```
+
+Quotes are amounts, not prices: the exchange derives the price and size of your order from your stake and the amount you accept. Above, a `2.00` stake against a `3.00` win prices at 2 / (2 + 3) = `0.4000`, for 5 contracts that pay `5.00` if both legs win. The cash out sold all 5 for the `1.75` the maker quoted. [Combos](https://docs.stxapp.io/sdks/typescript/combos/) walks through every call, including the maker side, and [Combo negotiation](https://docs.stxapp.io/websockets/channels/combo-negotiation/) documents the protocol.
+
 ### Read your portfolio
 
 `npm run portfolio` prints your key's scope, balance, open positions, open orders and recent fills. Code: [`examples/portfolio.ts`](examples/portfolio.ts). This run is from the Ontario demo exchange.
@@ -152,7 +178,7 @@ npm test
 
 The tests stub `fetch`, so they need no API key and make no network calls.
 
-The [Live](.github/workflows/live.yml) workflow also runs every example against the US and Ontario demo exchanges on each push to `main` and once a day.
+The [Live](.github/workflows/live.yml) workflow also runs every example against the US and Ontario demo exchanges (combos on US demo only) on each push to `main` and once a day.
 
 ## Building an app for other STX members?
 
