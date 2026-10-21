@@ -143,7 +143,8 @@ export type QuoteOutcome =
 /**
  * Waits up to `timeoutMs` for a live quote on `rfqId` and accepts it at its
  * exact amount. When the best moves before the accept lands, it takes the new
- * best if one is live, or waits for the next. `onQuote` sees every best quote
+ * best if one is live, or waits for the next. Any other refusal of the accept
+ * comes back as `closed` with the exchange's reason. `onQuote` sees every best quote
  * as it arrives, including the empty one sent when quotes are withdrawn.
  */
 export async function takeBestQuote(
@@ -172,9 +173,16 @@ export async function takeBestQuote(
         const placement = await player.accept(rfqId, best.quote_id, best.amount);
         return { kind: "placed", amount: best.amount, placement };
       } catch (err) {
-        if (!(err instanceof STXComboPriceMovedException)) throw err;
-        best = err.best; // the request stays open: take the live best, or wait for the next quote
-        onQuote?.(best);
+        if (err instanceof STXComboPriceMovedException) {
+          best = err.best; // the request stays open: take the live best, or wait for the next quote
+          onQuote?.(best);
+          continue;
+        }
+        // Any other refusal, e.g. player_refused:nothing_to_sell when the holding changed under a cash out.
+        if (err instanceof STXComboRefusedException) {
+          return { kind: "closed", reason: err.detail ? `${err.code} (${err.detail})` : err.code };
+        }
+        throw err;
       }
     }
   }
