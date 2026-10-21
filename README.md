@@ -156,7 +156,7 @@ The [Live](.github/workflows/live.yml) workflow also runs every example against 
 
 ## Building an app for other STX members?
 
-Everything above trades your own account with your own API key. OAuth is only needed when you build an app that acts on behalf of other STX members, with their consent. See [Apps for STX members (OAuth)](https://docs.stxapp.io/sdks/typescript/oauth/) and the [ISV guide](https://docs.stxapp.io/isv/), and the example app [stx-isv-demo](https://github.com/stxapp/stx-isv-demo).
+Everything above trades your own account with your own API key. OAuth is only needed when you build an app that acts on behalf of other STX members, with their consent. See [OAuth with the TypeScript SDK](https://docs.stxapp.io/isv/typescript-sdk/) and the [ISV guide](https://docs.stxapp.io/isv/), and the example app [stx-isv-demo](https://github.com/stxapp/stx-isv-demo).
 
 ## Documentation
 
