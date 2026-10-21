@@ -13,6 +13,7 @@
     "trade": "tsx examples/trade.ts",
     "live": "tsx examples/live.ts",
     "portfolio": "tsx examples/portfolio.ts",
+    "combos": "tsx examples/combos.ts",
     "typecheck": "tsc",
     "test": "tsx --test test/helpers.test.ts"
   },

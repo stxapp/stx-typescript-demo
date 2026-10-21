@@ -3,8 +3,29 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
 import { test } from "node:test";
-import { KEY_HEADER, NO_RETRY, STX, STXNotFoundException, type FetchLike, type Market } from "@stxapp/stx-typescript";
-import { findRestingBuy, restingBuyPrice, wouldRest } from "../src/helpers.ts";
+import {
+  KEY_HEADER,
+  NO_RETRY,
+  STX,
+  STXComboPriceMovedException,
+  STXComboRefusedException,
+  STXNotFoundException,
+  STXTimeoutException,
+  type ComboPlacement,
+  type ComboPlayerEvent,
+  type FetchLike,
+  type Market,
+} from "@stxapp/stx-typescript";
+import {
+  cashOutWhenHeld,
+  comboStake,
+  findRestingBuy,
+  pickComboLegs,
+  restingBuyPrice,
+  takeBestQuote,
+  wouldRest,
+  type QuotePlayer,
+} from "../src/helpers.ts";
 
 // A throwaway Ed25519 key, so the client signs requests exactly as it would against an exchange.
 const { privateKey } = generateKeyPairSync("ed25519");
@@ -81,4 +102,130 @@ test("findRestingBuy passes a sport to the markets query", async () => {
 test("a 404 from balance() is an STXNotFoundException", async () => {
   const client = stubClient(async () => json({ error: "not found" }, 404));
   await assert.rejects(client.balance(), STXNotFoundException);
+});
+
+test("comboStake gives dollars with two decimals and refuses anything else", () => {
+  assert.equal(comboStake("2"), "2.00");
+  assert.equal(comboStake("2.5"), "2.50");
+  assert.equal(comboStake(" 5.25 "), "5.25");
+  assert.throws(() => comboStake("0"));
+  assert.throws(() => comboStake("5.001")); // below a cent
+  assert.throws(() => comboStake("-1"));
+  assert.throws(() => comboStake("five"));
+});
+
+test("pickComboLegs takes one open, future, non-combo market per event", async () => {
+  const urls: URL[] = [];
+  const client = stubClient(async (input) => {
+    urls.push(new URL(input));
+    const future = "2026-10-22T23:00:00.000000Z";
+    return json({
+      markets: [
+        { market_id: "a1", event_id: "e1", event_status: "scheduled", event_start: future },
+        { market_id: "a2", event_id: "e1", event_status: "scheduled", event_start: future }, // same event as a1
+        { market_id: "old", event_id: "e2", event_status: "scheduled", event_start: "2026-10-19T00:00:00Z" }, // already started
+        { market_id: "live", event_id: "e3", event_status: "in_progress", event_start: future },
+        { market_id: "combo", event_id: "e4", event_type: "combo", event_status: "scheduled", event_start: future },
+        { market_id: "gone", event_id: "e5", archived: true, event_status: "scheduled", event_start: future },
+        { market_id: "b1", event_id: "e6", event_status: "scheduled", event_start: future },
+        { market_id: "c1", event_id: "e7", event_status: "scheduled", event_start: future },
+      ],
+      cursor: null,
+    });
+  });
+  const now = new Date("2026-10-21T00:00:00Z");
+  const legs = await pickComboLegs(client, { count: 2, sport: "Football", now });
+  assert.deepEqual(legs.map((m) => m.market_id), ["a1", "b1"]);
+  assert.equal(urls[0]!.searchParams.get("status"), "open");
+  assert.equal(urls[0]!.searchParams.get("trading"), "true");
+  assert.equal(urls[0]!.searchParams.get("sports"), "Football");
+
+  const all = await pickComboLegs(client, { count: 5, now });
+  assert.deepEqual(all.map((m) => m.market_id), ["a1", "b1", "c1"]); // fewer than asked when the scan runs out
+});
+
+/** A stand-in ComboPlayer: next() hands out `events` in order, then times out. */
+function fakePlayer(events: ComboPlayerEvent[], accept: QuotePlayer["accept"]): QuotePlayer & { accepted: string[][] } {
+  const queue = [...events];
+  const accepted: string[][] = [];
+  return {
+    accepted,
+    async next() {
+      const event = queue.shift();
+      if (!event) throw new STXTimeoutException("no event", { topic: "rfq:u1" });
+      return event;
+    },
+    async accept(rfqId, quoteId, amount) {
+      accepted.push([rfqId, quoteId, amount]);
+      return accept(rfqId, quoteId, amount);
+    },
+  };
+}
+
+const best = (rfq_id: string, quote_id: string | null, amount: string | null): ComboPlayerEvent => ({
+  event: "best_quote",
+  payload: { rfq_id, market_id: null, quote_id, amount, expires_at: quote_id ? 1792512210052723 : null },
+});
+const placement: ComboPlacement = { market_id: "combo-1", order_id: "o1", quantity: "7.00", price: "0.2858" };
+
+test("takeBestQuote accepts the first live quote at its exact amount", async () => {
+  const seen: (string | null)[] = [];
+  const player = fakePlayer(
+    [best("other", "q0", "9.0000"), best("r1", null, null), best("r1", "q1", "5.0000")],
+    async () => placement,
+  );
+  const outcome = await takeBestQuote(player, "r1", { timeoutMs: 1000, onQuote: (q) => seen.push(q.amount) });
+  assert.deepEqual(outcome, { kind: "placed", amount: "5.0000", placement });
+  assert.deepEqual(player.accepted, [["r1", "q1", "5.0000"]]); // another request's quote is ignored
+  assert.deepEqual(seen, [null, "5.0000"]);
+});
+
+test("takeBestQuote takes the live best when the price moved", async () => {
+  let calls = 0;
+  const player = fakePlayer([best("r1", "q1", "5.0000")], async () => {
+    if (++calls === 1) {
+      throw new STXComboPriceMovedException("accept on rfq:u1 refused: price_moved", {
+        command: "accept",
+        code: "price_moved",
+        best: { quote_id: "q2", amount: "4.8000", expires_at: 1792512210052723 },
+      });
+    }
+    return placement;
+  });
+  const outcome = await takeBestQuote(player, "r1", { timeoutMs: 1000 });
+  assert.equal(outcome.kind, "placed");
+  assert.deepEqual(player.accepted, [
+    ["r1", "q1", "5.0000"],
+    ["r1", "q2", "4.8000"],
+  ]);
+});
+
+test("takeBestQuote reports no quote, and a request that closed", async () => {
+  assert.deepEqual(await takeBestQuote(fakePlayer([], async () => placement), "r1", { timeoutMs: 1000 }), {
+    kind: "no_quote",
+  });
+  const closed: ComboPlayerEvent = { event: "negotiation_closed", payload: { rfq_id: "r1", market_id: null, reason: "expired" } };
+  assert.deepEqual(await takeBestQuote(fakePlayer([closed], async () => placement), "r1", { timeoutMs: 1000 }), {
+    kind: "closed",
+    reason: "expired",
+  });
+});
+
+test("cashOutWhenHeld retries nothing_to_sell, and nothing else", async () => {
+  const refusal = (code: string) =>
+    new STXComboRefusedException(`cash_out on rfq:u1 refused: ${code}`, { command: "cash_out", code });
+  const reply = { rfq_id: "r2", market_id: "combo-1", quantity: "7.00" };
+
+  let calls = 0;
+  const later = { cashOut: async () => (++calls < 3 ? Promise.reject(refusal("nothing_to_sell")) : reply) };
+  assert.deepEqual(await cashOutWhenHeld(later, "combo-1", { delayMs: 1 }), reply);
+  assert.equal(calls, 3);
+
+  const never = { cashOut: async () => Promise.reject(refusal("nothing_to_sell")) };
+  await assert.rejects(cashOutWhenHeld(never, "combo-1", { attempts: 2, delayMs: 1 }), STXComboRefusedException);
+
+  let other = 0;
+  const closed = { cashOut: async () => (other++, Promise.reject(refusal("market_not_quotable"))) };
+  await assert.rejects(cashOutWhenHeld(closed, "combo-1", { delayMs: 1 }), STXComboRefusedException);
+  assert.equal(other, 1);
 });
