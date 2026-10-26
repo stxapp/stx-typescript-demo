@@ -100,7 +100,7 @@ export function wouldRest(market: Market, price: string): boolean {
  */
 export async function findRestingBuy(
   client: STX,
-  { sport, scan = 200, now = new Date() }: { sport?: string; scan?: number; now?: Date } = {},
+  { sport, scan = 1000, now = new Date() }: { sport?: string; scan?: number; now?: Date } = {},
 ): Promise<{ market: Market; price: string } | null> {
   let seen = 0;
   const query = { status: "open", trading: true, ...(sport ? { sports: [sport] } : {}) } as const;
