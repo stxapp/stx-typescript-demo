@@ -7,9 +7,6 @@
 // maker's placed instead (placed_elsewhere), your quote expiring, and the
 // request closing. It needs a read_write API key.
 //
-// Combos run on the US demo and Ontario demo exchanges (region us or ontario,
-// env demo).
-//
 // On a buy you quote what the player wins: the stake times WIN_MULTIPLE. On a
 // cash out you quote what you pay for everything the player sells:
 // CASH_OUT_PRICE a contract. Each quote stands for QUOTE_SECONDS.
@@ -56,7 +53,7 @@ async function quoteEverything(): Promise<number> {
     maker = await ws.comboMaker();
   } catch (err) {
     if (!(err instanceof STXCombosUnavailableException)) throw err;
-    console.log(`Combos are not available on ${client.baseUrl}. They run on the US demo and Ontario demo exchanges.`);
+    console.log(`Combos are not available on ${client.baseUrl}.`);
     return 1;
   }
   console.log(`Quoting combos on ${client.baseUrl} as a maker.`);
