@@ -8,6 +8,7 @@ import {
   type ComboCashOutReply,
   type ComboPlacement,
   type ComboPlayerEvent,
+  type ComboRfqOpenedEvent,
   type Market,
   type STX,
 } from "@stxapp/stx-typescript";
@@ -99,7 +100,7 @@ export function wouldRest(market: Market, price: string): boolean {
  */
 export async function findRestingBuy(
   client: STX,
-  { sport, scan = 200, now = new Date() }: { sport?: string; scan?: number; now?: Date } = {},
+  { sport, scan = 1000, now = new Date() }: { sport?: string; scan?: number; now?: Date } = {},
 ): Promise<{ market: Market; price: string } | null> {
   let seen = 0;
   const query = { status: "open", trading: true, ...(sport ? { sports: [sport] } : {}) } as const;
@@ -236,4 +237,64 @@ export async function cashOutWhenHeld(
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
   }
+}
+
+// Exact decimal arithmetic for the maker's quote check: amounts and ticks as
+// integers of 10^-8 dollars, so no price is rounded through a float.
+const SCALE = 10n ** 8n;
+
+function toUnits(value: string): bigint {
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(value.trim());
+  if (!match) throw new Error(`not a decimal string: ${JSON.stringify(value)}`);
+  const decimals = (match[2] ?? "").padEnd(8, "0").slice(0, 8);
+  return BigInt(match[1]!) * SCALE + BigInt(decimals);
+}
+
+/** Integer division rounded down (`up` false) or up (`up` true), for non-negative values. */
+function divide(a: bigint, b: bigint, up: boolean): bigint {
+  return up ? (a + b - 1n) / b : a / b;
+}
+
+/** Whole cents of `units`, rounded down, as a dollar string: 333250000n becomes "3.33". */
+function centsString(units: bigint): string {
+  const cents = units / (SCALE / 100n);
+  return `${cents / 100n}.${String(cents % 100n).padStart(2, "0")}`;
+}
+
+/**
+ * The amount a maker quotes on `request`, in whole cents, or null when the
+ * exchange would refuse it.
+ *
+ * On a buy the amount is what the player wins: the stake times `winMultiple`.
+ * On a cash out it is what you pay for the whole size: `cashOutPrice` a
+ * contract. The exchange derives a price from the amount, rounded to the
+ * request's `tick_size` in your favour, and refuses a quote whose price is not
+ * above 0 and below `max_price` (`price_out_of_range`), or, on a buy, whose
+ * stake buys no whole contract (`below_one_contract`). This checks the same
+ * rules first, so the example does not send a quote it knows will fail.
+ */
+export function makerQuoteAmount(
+  request: Pick<ComboRfqOpenedEvent, "side" | "amount" | "quantity" | "max_price" | "tick_size">,
+  winMultiple: string,
+  cashOutPrice: string,
+): string | null {
+  const maxPrice = toUnits(request.max_price);
+  const tick = toUnits(request.tick_size);
+  const cent = SCALE / 100n;
+  if (request.side === "buy") {
+    const stake = toUnits(request.amount ?? "0");
+    const amount = ((stake * toUnits(winMultiple)) / SCALE / cent) * cent;
+    if (amount <= 0n) return null;
+    // max_price x stake / (stake + amount), rounded up to the tick.
+    const price = divide(maxPrice * stake, (stake + amount) * tick, true) * tick;
+    if (price <= 0n || price >= maxPrice || stake / price < 1n) return null;
+    return centsString(amount);
+  }
+  const quantity = toUnits(request.quantity ?? "0");
+  const amount = ((quantity * toUnits(cashOutPrice)) / SCALE / cent) * cent;
+  if (quantity <= 0n) return null;
+  // amount / quantity, rounded down to the tick.
+  const price = divide(amount * SCALE, quantity * tick, false) * tick;
+  if (price <= 0n || price >= maxPrice) return null;
+  return centsString(amount);
 }
