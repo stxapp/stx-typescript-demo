@@ -2,7 +2,7 @@
 
 [![Live](https://github.com/stxapp/stx-typescript-demo/actions/workflows/live.yml/badge.svg)](https://github.com/stxapp/stx-typescript-demo/actions/workflows/live.yml) [![CI](https://github.com/stxapp/stx-typescript-demo/actions/workflows/ci.yml/badge.svg)](https://github.com/stxapp/stx-typescript-demo/actions/workflows/ci.yml)
 
-Small, commented scripts that list markets, place and cancel an order, stream live prices and your account, buy and cash out a combo, and read your portfolio on the [STX](https://stxapp.io) exchange, using the [`@stxapp/stx-typescript`](https://www.npmjs.com/package/@stxapp/stx-typescript) SDK.
+Small, commented scripts that list markets, place and cancel an order, stream live prices and your account, buy and cash out a combo, quote combos as a maker, and read your portfolio on the [STX](https://stxapp.io) exchange, using the [`@stxapp/stx-typescript`](https://www.npmjs.com/package/@stxapp/stx-typescript) SDK.
 
 ## Before you start
 
@@ -121,7 +121,7 @@ The client signs the connection, sends heartbeats and reconnects for you. The ch
 
 ### Buy and cash out a combo
 
-`npm run combos` buys a small combo as a player and then cashes it out, so the run ends holding nothing. Code: [`examples/combos.ts`](examples/combos.ts). Combos run on the US demo exchange (`region = us`, `env = demo`); on any other exchange the script says so and exits.
+`npm run combos` buys a small combo as a player and then cashes it out, so the run ends holding nothing. Code: [`examples/combos.ts`](examples/combos.ts). Combos run on the US demo and Ontario demo exchanges (`env = demo`, with `region = us` or `region = ontario`); on any other exchange the script says so and exits.
 
 A combo is one market over two or more legs, and it pays only if every leg wins. The script picks two open markets from different events that have not started, asks makers to quote on a stake of `2.00`, prints each quote as it arrives (what you would win on that stake), and accepts the best one at its exact amount. The exchange then places your order on the combo's own market. The script cashes out the same way: it asks makers what they pay for everything you hold, accepts the best quote, and checks your position is back to zero.
 
@@ -144,6 +144,45 @@ Final:   position 0.00 on the combo  open orders 0
 ```
 
 Quotes are amounts, not prices: the exchange derives the price and size of your order from your stake and the amount you accept. Above, a `2.00` stake against a `15.14` win prices at 2 / (2 + 15.14) = 0.11669, rounded up to the combo's tick: `0.1167`. That buys 17 whole contracts, which pay `17.00` if both legs win. The cash out sold all 17 for the `1.79` the maker quoted, at 1.79 / 17 = 0.10529, rounded down: `0.1052`. [Combos](https://docs.stxapp.io/sdks/typescript/combos/) walks through every call, including the maker side, and [Combo negotiation](https://docs.stxapp.io/websockets/channels/combo-negotiation/) documents the protocol.
+
+### Quote combos as a maker
+
+`npm run combo-maker` joins as a maker and quotes every combo request on the exchange until you press Ctrl-C, printing how each one ends. Code: [`examples/combo_maker.ts`](examples/combo_maker.ts). It runs where combos do, on the US demo and Ontario demo exchanges, and needs a `read_write` key.
+
+Each request arrives as `rfq_opened`. On a buy you quote what the player wins, the stake times `WIN_MULTIPLE` (default `9`); on a cash out you quote what you pay for everything the player sells, `CASH_OUT_PRICE` a contract (default `0.08`). Each quote stands for `QUOTE_SECONDS` (default `30`). The script checks that the amount prices inside the request's `max_price` and `tick_size` before it sends it, and skips the request if not. `npm run combo-maker -- 120` stops after 120 seconds instead.
+
+This run, on the Ontario demo exchange with `WIN_MULTIPLE=15 CASH_OUT_PRICE=0.12`, quoted a buy and then the player's cash out of the same combo, and won both:
+
+```text
+Quoting combos on https://demo.stxapp.ca as a maker.
+Buys: win 15x the stake. Cash outs: 0.12 a contract. Each quote stands 30 s. Ctrl-C to stop.
+
+[request]  fd508d3f  buy, stake 2.0000, 2 legs: WSH @ CHA won, LA @ NYR won
+[quoted]   fd508d3f  win 30.0000  for 30 s  quote f8f62b4b-f47a-488d-b637-7d3cc273d6d6
+[accepted] fd508d3f  quote f8f62b4b-f47a-488d-b637-7d3cc273d6d6
+[won]      fd508d3f  order 5ad79179-be99-40c0-9d46-64a1d3773ba4  32.00 @ 0.0625  combo df0489de-8f36-4fde-818e-adeaf038bde3
+[closed]   fd508d3f  placed
+[request]  22f4ee6f  cash out of 32.00 on combo df0489de
+[quoted]   22f4ee6f  pay 3.8400 for 32.00  for 30 s  quote ea87fdb0-f6e0-48fe-892b-c731d819cd04
+[accepted] 22f4ee6f  quote ea87fdb0-f6e0-48fe-892b-c731d819cd04
+[won]      22f4ee6f  order 7dde1e51-d374-490e-a660-f744325a0f10  32.00 @ 0.1200  combo df0489de-8f36-4fde-818e-adeaf038bde3
+[closed]   22f4ee6f  placed
+```
+
+`[accepted]` is `quote_accepted`: the player took your quote and the exchange is placing both orders. `[won]` is `placed`, with your order on the combo's market at the same price and size as the player's. When another maker quotes the player more, the player takes theirs and your quote ends with `placed_elsewhere`, as in this run at `WIN_MULTIPLE=3 CASH_OUT_PRICE=0.02`:
+
+```text
+[request]  f13eb57b  buy, stake 2.0000, 2 legs: WSH @ CHA won, LA @ NYR won
+[quoted]   f13eb57b  win 6.0000  for 30 s  quote 512b95f1-fc31-4b9d-ab5b-0df5946f77ca
+[lost]     f13eb57b  quote 512b95f1-fc31-4b9d-ab5b-0df5946f77ca  placed_elsewhere
+[closed]   f13eb57b  placed
+[request]  82e39fd8  cash out of 32.00 on combo df0489de
+[quoted]   82e39fd8  pay 0.6400 for 32.00  for 30 s  quote 70d8814a-ad55-48ba-9a2f-fe60b5d006e5
+[lost]     82e39fd8  quote 70d8814a-ad55-48ba-9a2f-fe60b5d006e5  placed_elsewhere
+[closed]   82e39fd8  placed
+```
+
+A quote can also end `[expired]`, when its `QUOTE_SECONDS` run out and a later quote on the request replaces it, or with the request's own reason, such as `cancelled`. `[closed]` is `rfq_closed`, sent for every request whether you quoted or not. Other makers quote on the demo exchanges too, so expect to lose some requests. A request your own account opened is refused with `cannot_quote_own_request`. Every socket joined as one account gets the pushes about all of that account's quotes, so run one maker per account. Quotes belong to the connection that placed them: on Ctrl-C, or if the connection drops, they are withdrawn. [Quote combos as a maker](https://docs.stxapp.io/websockets/combo-maker/) covers the maker side in every language, and [Combo negotiation](https://docs.stxapp.io/websockets/channels/combo-negotiation/) documents each frame.
 
 ### Read your portfolio
 
@@ -179,7 +218,7 @@ npm test
 
 The tests stub `fetch`, so they need no API key and make no network calls.
 
-The [Live](.github/workflows/live.yml) workflow also runs every example against the US and Ontario demo exchanges (combos on US demo only) on each push to `main` and once a day.
+The [Live](.github/workflows/live.yml) workflow also runs every example against the US and Ontario demo exchanges on each push to `main` and once a day.
 
 ## Building an app for other STX members?
 

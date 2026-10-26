@@ -6,7 +6,8 @@
 // market. Cashing out works the same way in reverse, so the run ends holding
 // nothing. It needs a read_write API key.
 //
-// Combos run on the US demo exchange (region us, env demo).
+// Combos run on the US demo and Ontario demo exchanges (region us or ontario,
+// env demo).
 //
 // Run: npm run combos                 (a 2.00 stake on two legs; waits 20 s for each quote)
 //      npm run combos -- 60           (waits up to 60 s for each quote)
@@ -42,7 +43,7 @@ async function buyAndCashOut(): Promise<number> {
     player = await ws.comboPlayer();
   } catch (err) {
     if (!(err instanceof STXCombosUnavailableException)) throw err;
-    console.log(`Combos are not available on ${client.baseUrl}. They run on the US demo exchange (region us, env demo).`);
+    console.log(`Combos are not available on ${client.baseUrl}. They run on the US demo and Ontario demo exchanges.`);
     return 1;
   }
 

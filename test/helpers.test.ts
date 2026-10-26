@@ -24,6 +24,7 @@ import {
   comboStake,
   findRestingBuy,
   isUpcoming,
+  makerQuoteAmount,
   pickComboLegs,
   restingBuyPrice,
   takeBestQuote,
@@ -289,4 +290,20 @@ test("cashOutWhenHeld retries nothing_to_sell, and nothing else", async () => {
   const closed = { cashOut: async () => (other++, Promise.reject(refusal("market_not_quotable"))) };
   await assert.rejects(cashOutWhenHeld(closed, "combo-1", { delayMs: 1 }), STXComboRefusedException);
   assert.equal(other, 1);
+});
+
+test("makerQuoteAmount prices a buy at the stake times the multiple, in whole cents", () => {
+  const buy = { side: "buy" as const, amount: "2.0000", quantity: null, max_price: "1.0000", tick_size: "0.0001000" };
+  assert.equal(makerQuoteAmount(buy, "9", "0.08"), "18.00");
+  assert.equal(makerQuoteAmount({ ...buy, amount: "2.5000" }, "1.333", "0.08"), "3.33");
+  // 0.50 / (0.50 + 0.01) prices at 0.9804: 0.50 buys no whole contract.
+  assert.equal(makerQuoteAmount({ ...buy, amount: "0.5000" }, "0.02", "0.08"), null);
+  assert.equal(makerQuoteAmount(buy, "0", "0.08"), null);
+});
+
+test("makerQuoteAmount pays the cash-out price for the whole size, below max_price", () => {
+  const sell = { side: "sell" as const, amount: null, quantity: "17.00", max_price: "1.0000", tick_size: "0.0001000" };
+  assert.equal(makerQuoteAmount(sell, "9", "0.08"), "1.36");
+  assert.equal(makerQuoteAmount(sell, "9", "1.00"), null);
+  assert.equal(makerQuoteAmount(sell, "9", "1.50"), null);
 });

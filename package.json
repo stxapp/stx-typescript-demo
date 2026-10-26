@@ -14,6 +14,7 @@
     "live": "tsx examples/live.ts",
     "portfolio": "tsx examples/portfolio.ts",
     "combos": "tsx examples/combos.ts",
+    "combo-maker": "tsx examples/combo_maker.ts",
     "typecheck": "tsc",
     "test": "tsx --test test/helpers.test.ts"
   },
