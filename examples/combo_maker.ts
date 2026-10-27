@@ -9,7 +9,8 @@
 //
 // On a buy you quote what the player wins: the stake times WIN_MULTIPLE. On a
 // cash out you quote what you pay for everything the player sells:
-// CASH_OUT_PRICE a contract. Each quote stands for QUOTE_SECONDS.
+// CASH_OUT_PRICE a contract. Each quote stands for QUOTE_SECONDS. With PLAYER
+// set to a player's external_id, it quotes only that player's requests.
 //
 // Run: npm run combo-maker              (quote until Ctrl-C)
 //      npm run combo-maker -- 120       (stop after 120 s)
@@ -30,6 +31,7 @@ const runSeconds = process.argv[2] ? Number(process.argv[2]) : null;
 const winMultiple = process.env.WIN_MULTIPLE ?? "9";
 const cashOutPrice = process.env.CASH_OUT_PRICE ?? "0.08";
 const quoteMs = Math.round(Number(process.env.QUOTE_SECONDS ?? 30) * 1000);
+const player = process.env.PLAYER; // a player's external_id: quote only their requests
 const client = new STX();
 
 // The SDK signs the socket, sends heartbeats and reconnects. Quotes belong to the
@@ -62,6 +64,7 @@ async function quoteEverything(): Promise<number> {
   );
 
   const deadline = runSeconds ? Date.now() + runSeconds * 1000 : null;
+  const quoting = new Set<string>(); // with PLAYER set, the requests this maker takes part in
   while (deadline === null || Date.now() < deadline) {
     let event: ComboMakerEvent;
     try {
@@ -71,6 +74,10 @@ async function quoteEverything(): Promise<number> {
       throw err;
     }
     const rfq = event.payload.rfq_id.slice(0, 8);
+    if (player && (event.event === "rfq_opened" || event.event === "rfq_closed")) {
+      if (event.event === "rfq_opened" && event.payload.external_id === player) quoting.add(event.payload.rfq_id);
+      if (!quoting.has(event.payload.rfq_id)) continue; // another player's request
+    }
     switch (event.event) {
       case "rfq_opened":
         // Every request opened after the join, from every player, your own included.
