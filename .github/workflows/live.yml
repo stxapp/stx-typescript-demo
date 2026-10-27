@@ -3,14 +3,15 @@ name: Live
 # Runs every example against the public demo exchanges, selected with
 # STX_REGION and STX_ENV exactly as a customer would. The trade example places
 # one 1% buy that rests on the book and cancels it before it exits. The combos
-# example buys a small combo from a maker's quote and cashes it out in the same
-# run, while the maker example runs beside it: the maker sees that request and
-# is refused a quote on it (cannot_quote_own_request), since both use the same
-# account.
+# example buys a small combo and cashes it out in the same run, while the maker
+# example quotes it from a second account. The maker quotes above the
+# exchange's own maker, so the run checks that the buy filled against the
+# example maker's quote.
 #
 # Needs these repository secrets (read_write API keys, the PEM as text):
 #   US_DEMO_API_KEY_ID, US_DEMO_API_KEY_PEM            (region us, env demo)
 #   ONTARIO_DEMO_API_KEY_ID, ONTARIO_DEMO_API_KEY_PEM  (region ontario, env demo)
+#   <prefix>_MAKER_API_KEY_ID, <prefix>_MAKER_API_KEY_PEM  (the maker's account)
 #
 # Never runs on pull requests, so the secrets are not exposed to them.
 
@@ -50,11 +51,17 @@ jobs:
       STX_ENV: ${{ matrix.env }}
       STX_KEY_ID: ${{ secrets[format('{0}_API_KEY_ID', matrix.prefix)] }}
       STX_PRIVATE_KEY: ${{ secrets[format('{0}_API_KEY_PEM', matrix.prefix)] }}
+      MAKER_KEY_ID: ${{ secrets[format('{0}_MAKER_API_KEY_ID', matrix.prefix)] }}
+      MAKER_KEY_PEM: ${{ secrets[format('{0}_MAKER_API_KEY_PEM', matrix.prefix)] }}
     steps:
       - name: Require an API key
         run: |
           if [ -z "$STX_KEY_ID" ] || [ -z "$STX_PRIVATE_KEY" ]; then
             echo "::error::Secrets ${{ matrix.prefix }}_API_KEY_ID and ${{ matrix.prefix }}_API_KEY_PEM must be set to run the examples on ${{ matrix.name }}."
+            exit 1
+          fi
+          if [ -z "$MAKER_KEY_ID" ] || [ -z "$MAKER_KEY_PEM" ]; then
+            echo "::error::Secrets ${{ matrix.prefix }}_MAKER_API_KEY_ID and ${{ matrix.prefix }}_MAKER_API_KEY_PEM must be set to run the combo maker on ${{ matrix.name }}."
             exit 1
           fi
       - uses: actions/checkout@v4
@@ -94,17 +101,36 @@ jobs:
           # A warning, not a failure: other clients may share this account.
           grep -q '^Open orders: 0' portfolio.log || echo "::warning::the account on ${{ matrix.name }} has open orders after the run"
 
-      - name: npm run combos, with npm run combo-maker beside it
+      - name: npm run combos, quoted by npm run combo-maker on a second account
+        # The maker quotes 12x the stake and 0.40 a contract on a cash out, above
+        # the exchange's own maker (about 9x and 0.10 to 0.27), and only this
+        # run's player (PLAYER), so it never takes another run's requests.
         run: |
           set -o pipefail
-          npm run -s combo-maker -- 75 > maker.log 2>&1 &
+          trap 'echo "--- maker.log"; cat maker.log' EXIT
+          # The player's external_id, the one identity a maker sees on a request.
+          PLAYER=$(node --input-type=module -e '
+            import { STX } from "@stxapp/stx-typescript";
+            const ws = await new STX().websocket().connect();
+            console.log((await ws.comboPlayer()).externalId);
+            await ws.close();
+            process.exit(0);
+          ')
+          [ -n "$PLAYER" ] || { echo "::error::no external_id for the player on ${{ matrix.name }}"; exit 1; }
+          PLAYER="$PLAYER" STX_KEY_ID="$MAKER_KEY_ID" STX_PRIVATE_KEY="$MAKER_KEY_PEM" WIN_MULTIPLE=12 CASH_OUT_PRICE=0.40 \
+            npm run -s combo-maker -- 60 > maker.log 2>&1 &
           maker=$!
           sleep 8
           npm run -s combos -- 30 | tee combos.log
           grep -q '^Bought: ' combos.log || { echo "::error::combos bought nothing on ${{ matrix.name }}"; exit 1; }
           grep -q '^Sold: ' combos.log || { echo "::error::combos did not cash out on ${{ matrix.name }}"; exit 1; }
           grep -q '^Final:   position 0' combos.log || { echo "::error::combos left a position on ${{ matrix.name }}"; exit 1; }
-          wait "$maker" || { cat maker.log; echo "::error::combo-maker exited non-zero on ${{ matrix.name }}"; exit 1; }
-          cat maker.log
-          grep -q '^\[request\] ' maker.log || { echo "::error::combo-maker saw no request on ${{ matrix.name }}"; exit 1; }
-          grep -q 'cannot_quote_own_request' maker.log || { echo "::error::combo-maker did not try to quote the request on ${{ matrix.name }}"; exit 1; }
+          wait "$maker" || { echo "::error::combo-maker exited non-zero on ${{ matrix.name }}"; exit 1; }
+          buy=$(sed -n 's/^Request: \([0-9a-f]\{8\}\).*/\1/p' combos.log)
+          sell=$(sed -n 's/^Cash out: \([0-9a-f]\{8\}\).*/\1/p' combos.log)
+          [ ${#buy} -eq 8 ] && [ ${#sell} -eq 8 ] || { echo "::error::combos printed no request ids on ${{ matrix.name }}"; exit 1; }
+          grep -q "^\[request\]  $buy " maker.log || { echo "::error::combo-maker did not see request $buy on ${{ matrix.name }}"; exit 1; }
+          grep -q "^\[quoted\]   $buy " maker.log || { echo "::error::combo-maker did not quote request $buy on ${{ matrix.name }}"; exit 1; }
+          grep -q "^\[won\]      $buy " maker.log || { echo "::error::the buy $buy did not fill against combo-maker's quote on ${{ matrix.name }}"; exit 1; }
+          grep -q "^\[quoted\]   $sell " maker.log || { echo "::error::combo-maker did not quote the cash out $sell on ${{ matrix.name }}"; exit 1; }
+          grep -q "^\[won\]      $sell " maker.log || echo "::warning::another maker took the cash out $sell on ${{ matrix.name }}; combo-maker still holds its side"
