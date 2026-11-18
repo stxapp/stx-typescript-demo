@@ -2,7 +2,7 @@
 
 [![Live](https://github.com/stxapp/stx-typescript-demo/actions/workflows/live.yml/badge.svg)](https://github.com/stxapp/stx-typescript-demo/actions/workflows/live.yml) [![CI](https://github.com/stxapp/stx-typescript-demo/actions/workflows/ci.yml/badge.svg)](https://github.com/stxapp/stx-typescript-demo/actions/workflows/ci.yml)
 
-Small, commented scripts that list markets, place and cancel an order (plain or post-only), stream live prices and your account, buy and cash out a combo, quote combos as a maker, and read your portfolio on the [STX](https://stxapp.io) exchange, using the [`@stxapp/stx-typescript`](https://www.npmjs.com/package/@stxapp/stx-typescript) SDK.
+Small, commented scripts that list markets, place and cancel an order (plain, post-only or fill-or-kill), stream live prices and your account, buy and cash out a combo, quote combos as a maker, and read your portfolio on the [STX](https://stxapp.io) exchange, using the [`@stxapp/stx-typescript`](https://www.npmjs.com/package/@stxapp/stx-typescript) SDK.
 
 ## Before you start
 
@@ -91,26 +91,32 @@ Final:   status cancelled  filled 0.00
 
 The order carries a `clientOrderId`, your own id for it. If a call to place an order fails without an answer, look the order up by that id before placing it again; [Trading](https://docs.stxapp.io/sdks/typescript/trading/) explains why. The script does that lookup before it cancels, and it cancels whatever happens after the order is sent, so it never leaves an order on the book. It exits non-zero if the order is refused or does not end cancelled.
 
-### Place a post-only order
+### Post-only and fill-or-kill orders
 
-`npm run post-only` places the same kind of 1-contract buy as `npm run trade`, but post-only: it only ever rests on the book as a maker, and if it would trade on arrival the exchange does not place it. The script cancels it before it exits. Code: [`examples/post_only.ts`](examples/post_only.ts).
+`npm run fill-modes` places three 1-contract buys and leaves nothing on the book. Code: [`examples/fill_modes.ts`](examples/fill_modes.ts).
 
-Not every exchange offers post-only orders yet. The SDK asks the exchange before sending one; where it is not offered, `placeOrder` throws `STXNotAvailableException` and sends nothing, and the script prints that and exits 0. On an exchange without them:
+1. Post-only at a price that rests, the same kind of buy as `npm run trade`. A post-only order only ever rests on the book as a maker. The script shows it resting, then cancels it.
+2. Post-only at the best offer, where it would trade on arrival. The exchange cancels it with `cancellation_reason` `auto_matching` and nothing trades; `placeOrder` throws `STXPostOnlyWouldMatchException` carrying the cancelled order.
+3. Fill-or-kill at the resting price. It fills in full or not at all; with nothing to match, it is cancelled with nothing filled.
 
 ```text
-Exchange: demo.stxapp.io 3.3.210-rnd.4  post-only: false
-Market:   Washington Capitals at Tampa Bay Lightning: NHL WSH @ TB
-          STXNHL-26NOV171930WSHTB-GAMETB  (a winning contract pays 1.0000)
-Not here: Post-only orders are not available on demo.stxapp.io (version 3.3.210-rnd.4) yet.
+Market:     Anaheim Ducks at St. Louis Blues: NHL ANA @ STL
+            STXNHL-26NOV202000ANASTL-GAMESTL  (a winning contract pays 1.0000)
+Post-only:  buy 1 @ 0.01  id 2b65805b-3584-4f29-adbe-0284c99f982b  status open  fill mode post_only
+Cancel:     2b65805b-3584-4f29-adbe-0284c99f982b  cancelled
+Cross:      STXNBA-26NOV201930LALDEN-GAMEDEN  best offer 0.47
+Refused:    post-only would have matched (auto_matching)  id 7f0c1d2e-4a5b-4c6d-8e9f-0a1b2c3d4e5f  status cancelled  reason auto_matching  filled 0.00
+Fill-or-kill: cancelled  reason auto_matching  filled 0.00  id 9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d
 ```
 
-Where post-only orders are offered:
+The exchange decides whether it takes a fill mode. Where a mode is not enabled, `placeOrder` throws `STXNotAvailableException`, nothing is placed, and the script prints `Not here:` and exits 0.
+
+An exchange that does not have fill modes may instead place the order as a normal limit order, without an error. A normal order can trade like any other, so always check `fill_mode` on the order you get back. The script does: it cancels a normal order, and skips steps 2 and 3, since at the best offer a normal order would trade.
 
 ```text
-Market:   Anaheim Ducks at St. Louis Blues: NHL ANA @ STL
-          STXNHL-26NOV172000ANASTL-GAMESTL  (a winning contract pays 1.0000)
-Placed:   buy 1 @ 0.01  post-only  id 2b65805b-3584-4f29-adbe-0284c99f982b  status accepted  fill mode post_only
-Cancel:   2b65805b-3584-4f29-adbe-0284c99f982b  cancelled
+Normal:     buy 1 @ 0.01  id 5c4d3e2f-1a0b-4c9d-8e7f-6a5b4c3d2e1f  fill mode normal
+            This exchange placed it as a normal limit order: it does not have fill modes.
+Cancel:     5c4d3e2f-1a0b-4c9d-8e7f-6a5b4c3d2e1f  cancelled
 ```
 
 The script also shows the errors for a request blocked before it reaches the exchange: `STXBlockedException` carries a `reason` (`restricted_jurisdiction`, `unusual_network`) and a `reference` to quote to STX support, and is never worth retrying. See [Trading](https://docs.stxapp.io/sdks/typescript/trading/) and [Errors & retries](https://docs.stxapp.io/sdks/typescript/errors-and-retries/).

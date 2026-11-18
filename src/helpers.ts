@@ -114,6 +114,26 @@ export async function findRestingBuy(
 }
 
 /**
+ * The first open market accepting orders, whose event is upcoming, with an
+ * offer on the book. Returns the market and its best offer price, which a buy
+ * at that price would take. Null when none of the first `scan` markets fit.
+ */
+export async function findOffer(
+  client: STX,
+  { sport, scan = 1000, now = new Date() }: { sport?: string; scan?: number; now?: Date } = {},
+): Promise<{ market: Market; price: string } | null> {
+  let seen = 0;
+  const query = { status: "open", trading: true, ...(sport ? { sports: [sport] } : {}) } as const;
+  for await (const market of client.iterMarkets(query)) {
+    if (++seen > scan) break;
+    if (!market.market_id || !isUpcoming(market, now)) continue;
+    const offer = bestLevel(market.offers, "offer")?.price;
+    if (offer != null) return { market, price: offer };
+  }
+  return null;
+}
+
+/**
  * A combo stake as a dollar string with two decimals, e.g. "2" becomes "2.00".
  * The exchange takes whole cents and nothing below one cent.
  */

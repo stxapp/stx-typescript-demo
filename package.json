@@ -11,7 +11,7 @@
   "scripts": {
     "markets": "tsx examples/markets.ts",
     "trade": "tsx examples/trade.ts",
-    "post-only": "tsx examples/post_only.ts",
+    "fill-modes": "tsx examples/fill_modes.ts",
     "live": "tsx examples/live.ts",
     "portfolio": "tsx examples/portfolio.ts",
     "combos": "tsx examples/combos.ts",
@@ -20,7 +20,7 @@
     "test": "tsx --test test/helpers.test.ts"
   },
   "dependencies": {
-    "@stxapp/stx-typescript": "^0.11.0"
+    "@stxapp/stx-typescript": "^0.12.1"
   },
   "devDependencies": {
     "@types/node": "^18.19.130",
