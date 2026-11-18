@@ -9,7 +9,7 @@
 
 import { randomUUID } from "node:crypto";
 import { STX, STXRejectedException, STXValidationException } from "@stxapp/stx-typescript";
-import { findRestingBuy } from "../src/helpers.ts";
+import { findRestingBuy, readOrder } from "../src/helpers.ts";
 
 const client = new STX();
 
@@ -39,7 +39,7 @@ try {
   console.log(`Placed:  buy 1 @ ${price}  id ${orderId}  status ${order.status}`);
 
   // 3. Read it back. The order is on the book and has not filled.
-  const open = await client.order(orderId);
+  const open = await readOrder(client, orderId);
   console.log(`Read:    status ${open.status}  filled ${open.filled} of ${open.quantity}  client id ${open.client_order_id}`);
 } catch (err) {
   // The exchange explains why it refused the order, e.g. a read_only key or a market that just paused.
@@ -62,7 +62,7 @@ try {
 
 // 5. Confirm the final state.
 if (orderId !== undefined) {
-  const done = await client.order(orderId);
+  const done = await readOrder(client, orderId);
   console.log(`Final:   status ${done.status}  filled ${done.filled}`);
   if (done.status !== "cancelled") process.exitCode = 1;
 }

@@ -32,7 +32,7 @@ import {
   STXRejectedException,
   STXValidationException,
 } from "@stxapp/stx-typescript";
-import { findOffer, findRestingBuy } from "../src/helpers.ts";
+import { findOffer, findRestingBuy, readOrder } from "../src/helpers.ts";
 
 const client = new STX();
 const sport = process.env.SPORT;
@@ -42,7 +42,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 async function settle(order: Order): Promise<Order> {
   for (let i = 0; i < 20 && order.status !== "filled" && order.status !== "cancelled"; i++) {
     await sleep(500);
-    order = await client.order(order.id!);
+    order = await readOrder(client, order.id!);
   }
   return order;
 }
@@ -68,7 +68,7 @@ try {
     });
     if (order.fill_mode === "post_only") {
       honored = true;
-      const onBook = await client.order(order.id!);
+      const onBook = await readOrder(client, order.id!);
       console.log(`Post-only:  buy 1 @ ${price}  id ${order.id}  status ${onBook.status}  fill mode ${onBook.fill_mode}`);
     } else {
       // The exchange ignored fill_mode: this is a normal limit order.

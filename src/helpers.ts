@@ -1,7 +1,9 @@
 // Small helpers shared by the examples. Nothing here talks to the network on its own.
 
 import {
+  type Order,
   STXComboPriceMovedException,
+  STXNotFoundException,
   STXComboRefusedException,
   STXTimeoutException,
   type ComboBestQuote,
@@ -131,6 +133,22 @@ export async function findOffer(
     if (offer != null) return { market, price: offer };
   }
   return null;
+}
+
+/**
+ * Reads an order by id. An order you just placed can take a moment to be
+ * readable, so a 404 is retried every 250 ms for up to `timeoutMs`.
+ */
+export async function readOrder(client: STX, id: string, timeoutMs = 5000): Promise<Order> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      return await client.order(id);
+    } catch (err) {
+      if (!(err instanceof STXNotFoundException) || Date.now() > deadline) throw err;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
 }
 
 /**
