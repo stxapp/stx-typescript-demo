@@ -2,7 +2,7 @@
 
 [![Live](https://github.com/stxapp/stx-typescript-demo/actions/workflows/live.yml/badge.svg)](https://github.com/stxapp/stx-typescript-demo/actions/workflows/live.yml) [![CI](https://github.com/stxapp/stx-typescript-demo/actions/workflows/ci.yml/badge.svg)](https://github.com/stxapp/stx-typescript-demo/actions/workflows/ci.yml)
 
-Small, commented scripts that list markets, place and cancel an order, stream live prices and your account, buy and cash out a combo, quote combos as a maker, and read your portfolio on the [STX](https://stxapp.io) exchange, using the [`@stxapp/stx-typescript`](https://www.npmjs.com/package/@stxapp/stx-typescript) SDK.
+Small, commented scripts that list markets, place and cancel an order (plain or post-only), stream live prices and your account, buy and cash out a combo, quote combos as a maker, and read your portfolio on the [STX](https://stxapp.io) exchange, using the [`@stxapp/stx-typescript`](https://www.npmjs.com/package/@stxapp/stx-typescript) SDK.
 
 ## Before you start
 
@@ -90,6 +90,30 @@ Final:   status cancelled  filled 0.00
 ```
 
 The order carries a `clientOrderId`, your own id for it. If a call to place an order fails without an answer, look the order up by that id before placing it again; [Trading](https://docs.stxapp.io/sdks/typescript/trading/) explains why. The script does that lookup before it cancels, and it cancels whatever happens after the order is sent, so it never leaves an order on the book. It exits non-zero if the order is refused or does not end cancelled.
+
+### Place a post-only order
+
+`npm run post-only` places the same kind of 1-contract buy as `npm run trade`, but post-only: it only ever rests on the book as a maker, and if it would trade on arrival the exchange does not place it. The script cancels it before it exits. Code: [`examples/post_only.ts`](examples/post_only.ts).
+
+Not every exchange offers post-only orders yet. The SDK asks the exchange before sending one; where it is not offered, `placeOrder` throws `STXNotAvailableException` and sends nothing, and the script prints that and exits 0. On an exchange without them:
+
+```text
+Exchange: demo.stxapp.io 3.3.210-rnd.4  post-only: false
+Market:   Washington Capitals at Tampa Bay Lightning: NHL WSH @ TB
+          STXNHL-26NOV171930WSHTB-GAMETB  (a winning contract pays 1.0000)
+Not here: Post-only orders are not available on demo.stxapp.io (version 3.3.210-rnd.4) yet.
+```
+
+Where post-only orders are offered:
+
+```text
+Market:   Anaheim Ducks at St. Louis Blues: NHL ANA @ STL
+          STXNHL-26NOV172000ANASTL-GAMESTL  (a winning contract pays 1.0000)
+Placed:   buy 1 @ 0.01  post-only  id 2b65805b-3584-4f29-adbe-0284c99f982b  status accepted  fill mode post_only
+Cancel:   2b65805b-3584-4f29-adbe-0284c99f982b  cancelled
+```
+
+The script also shows the errors for a request blocked before it reaches the exchange: `STXBlockedException` carries a `reason` (`restricted_jurisdiction`, `unusual_network`) and a `reference` to quote to STX support, and is never worth retrying. See [Trading](https://docs.stxapp.io/sdks/typescript/trading/) and [Errors & retries](https://docs.stxapp.io/sdks/typescript/errors-and-retries/).
 
 ### Stream prices and your account
 
