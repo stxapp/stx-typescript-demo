@@ -100,13 +100,13 @@ The order carries a `clientOrderId`, your own id for it. If a call to place an o
 3. Fill-or-kill at the resting price. It fills in full or not at all; with nothing to match, it is cancelled with nothing filled.
 
 ```text
-Market:     Anaheim Ducks at St. Louis Blues: NHL ANA @ STL
-            STXNHL-26NOV202000ANASTL-GAMESTL  (a winning contract pays 1.0000)
-Post-only:  buy 1 @ 0.01  id 2b65805b-3584-4f29-adbe-0284c99f982b  status open  fill mode post_only
-Cancel:     2b65805b-3584-4f29-adbe-0284c99f982b  cancelled
-Cross:      STXNBA-26NOV201930LALDEN-GAMEDEN  best offer 0.47
-Refused:    post-only would have matched (auto_matching)  id 7f0c1d2e-4a5b-4c6d-8e9f-0a1b2c3d4e5f  status cancelled  reason auto_matching  filled 0.00
-Fill-or-kill: cancelled  reason auto_matching  filled 0.00  id 9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d
+Market:     Houston Cougars at Florida Gators: NCAAB HOU @ FLA OU 150.5
+            STXNCAAB-26NOV181644HOUFLA-TOTAL150.5  (a winning contract pays 1.0000)
+Post-only:  buy 1 @ 0.01  id cd24d1b8-8020-4296-8ca7-2b8cd5ab3508  status open  fill mode post_only
+Cancel:     cd24d1b8-8020-4296-8ca7-2b8cd5ab3508  cancelled
+Cross:      STXNCAAB-26NOV181644HOUFLA-TOTAL150.5  best offer 0.5800
+Refused:    post-only would have matched (auto_matching)  id fe17331c-379a-48fa-86ff-c5c97b55bfd4  status cancelled  reason auto_matching  filled 0.00
+Fill-or-kill: cancelled  reason auto_matching  filled 0.00  id 80d5cacb-3c88-488f-9440-148fd4ea4f97
 ```
 
 The exchange decides whether it takes a fill mode. Where a mode is not enabled, `placeOrder` throws `STXNotAvailableException`, nothing is placed, and the script prints `Not here:` and exits 0.
@@ -114,9 +114,11 @@ The exchange decides whether it takes a fill mode. Where a mode is not enabled, 
 An exchange that does not have fill modes may instead place the order as a normal limit order, without an error. A normal order can trade like any other, so always check `fill_mode` on the order you get back. The script does: it cancels a normal order, and skips steps 2 and 3, since at the best offer a normal order would trade.
 
 ```text
-Normal:     buy 1 @ 0.01  id 5c4d3e2f-1a0b-4c9d-8e7f-6a5b4c3d2e1f  fill mode normal
+Market:     Houston Cougars at Florida Gators: NCAAB HOU @ FLA
+            STXNCAAB-26NOV181644HOUFLA-GAMEFLA  (a winning contract pays 1.0000)
+Normal:     buy 1 @ 0.01  id 0898925c-423d-4646-8412-807c80805ec5  fill mode normal
             This exchange placed it as a normal limit order: it does not have fill modes.
-Cancel:     5c4d3e2f-1a0b-4c9d-8e7f-6a5b4c3d2e1f  cancelled
+Cancel:     0898925c-423d-4646-8412-807c80805ec5  cancelled
 ```
 
 The script also shows the errors for a request blocked before it reaches the exchange: `STXBlockedException` carries a `reason` (`restricted_jurisdiction`, `unusual_network`) and a `reference` to quote to STX support, and is never worth retrying. See [Trading](https://docs.stxapp.io/sdks/typescript/trading/) and [Errors & retries](https://docs.stxapp.io/sdks/typescript/errors-and-retries/).
