@@ -79,6 +79,13 @@ jobs:
           npm run -s markets | tee markets.log
           grep -q 'markets shown' markets.log || { echo "::error::markets printed no summary on ${{ matrix.name }}"; exit 1; }
 
+      - name: npm run post-only
+        run: |
+          set -o pipefail
+          npm run -s post-only | tee post_only.log
+          # Placed and cancelled where post-only orders are offered, or said not offered and sent nothing.
+          grep -qE '^(Cancel: .* cancelled|Not here: |No open market)' post_only.log || { echo "::error::post-only neither cancelled its order nor reported post-only as not offered on ${{ matrix.name }}"; exit 1; }
+
       - name: npm run trade
         run: |
           set -o pipefail
