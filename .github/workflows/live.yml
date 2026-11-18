@@ -41,10 +41,12 @@ jobs:
             prefix: US_DEMO
             region: us
             env: demo
+            fill_modes: "on"
           - name: ontario-demo
             prefix: ONTARIO_DEMO
             region: ontario
             env: demo
+            fill_modes: ignored
     name: live (${{ matrix.name }})
     env:
       STX_REGION: ${{ matrix.region }}
@@ -79,12 +81,32 @@ jobs:
           npm run -s markets | tee markets.log
           grep -q 'markets shown' markets.log || { echo "::error::markets printed no summary on ${{ matrix.name }}"; exit 1; }
 
-      - name: npm run post-only
+      - name: npm run fill-modes
+        # US demo has fill modes on: post-only rests and is cancelled, a
+        # post-only at the best offer is refused (auto_matching), and a
+        # fill-or-kill with nothing to match is cancelled with nothing filled.
+        # Ontario demo runs a release from before fill modes, which ignores
+        # fill_mode and places a normal limit order; the script cancels it.
         run: |
           set -o pipefail
-          npm run -s post-only | tee post_only.log
-          # Placed and cancelled where post-only orders are offered, or said not offered and sent nothing.
-          grep -qE '^(Cancel: .* cancelled|Not here: |No open market)' post_only.log || { echo "::error::post-only neither cancelled its order nor reported post-only as not offered on ${{ matrix.name }}"; exit 1; }
+          npm run -s fill-modes | tee fill_modes.log
+          fail() { echo "::error::fill-modes on ${{ matrix.name }}: $1"; exit 1; }
+          grep -q '^No open market' fill_modes.log && { echo "::warning::no market to trade on ${{ matrix.name }}"; exit 0; }
+          grep -qE '^Cancel: .* cancelled' fill_modes.log || fail "the first order was not cancelled"
+          case "${{ matrix.fill_modes }}" in
+            on)
+              grep -qE '^Post-only: .* status (accepted|open) .*fill mode post_only' fill_modes.log || fail "post-only did not rest"
+              if grep -q '^Cross: .*skipped' fill_modes.log; then
+                echo "::warning::no offer to cross on ${{ matrix.name }}"
+              else
+                grep -qE '^Refused: .*\(auto_matching\).* status cancelled +reason auto_matching' fill_modes.log || fail "the crossing post-only was not cancelled with auto_matching"
+              fi
+              grep -qE '^Fill-or-kill: (cancelled +reason auto_matching +filled 0|filled )' fill_modes.log || fail "fill-or-kill was neither filled nor cancelled with nothing filled"
+              ;;
+            ignored)
+              grep -q '^Normal: ' fill_modes.log || fail "expected the order placed as a normal order"
+              ;;
+          esac
 
       - name: npm run trade
         run: |

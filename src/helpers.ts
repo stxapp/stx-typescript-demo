@@ -1,7 +1,9 @@
 // Small helpers shared by the examples. Nothing here talks to the network on its own.
 
 import {
+  type Order,
   STXComboPriceMovedException,
+  STXNotFoundException,
   STXComboRefusedException,
   STXTimeoutException,
   type ComboBestQuote,
@@ -111,6 +113,42 @@ export async function findRestingBuy(
     if (wouldRest(market, price)) return { market, price };
   }
   return null;
+}
+
+/**
+ * The first open market accepting orders, whose event is upcoming, with an
+ * offer on the book. Returns the market and its best offer price, which a buy
+ * at that price would take. Null when none of the first `scan` markets fit.
+ */
+export async function findOffer(
+  client: STX,
+  { sport, scan = 1000, now = new Date() }: { sport?: string; scan?: number; now?: Date } = {},
+): Promise<{ market: Market; price: string } | null> {
+  let seen = 0;
+  const query = { status: "open", trading: true, ...(sport ? { sports: [sport] } : {}) } as const;
+  for await (const market of client.iterMarkets(query)) {
+    if (++seen > scan) break;
+    if (!market.market_id || !isUpcoming(market, now)) continue;
+    const offer = bestLevel(market.offers, "offer")?.price;
+    if (offer != null) return { market, price: offer };
+  }
+  return null;
+}
+
+/**
+ * Reads an order by id. An order you just placed can take a moment to be
+ * readable, so a 404 is retried every 250 ms for up to `timeoutMs`.
+ */
+export async function readOrder(client: STX, id: string, timeoutMs = 5000): Promise<Order> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      return await client.order(id);
+    } catch (err) {
+      if (!(err instanceof STXNotFoundException) || Date.now() > deadline) throw err;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
 }
 
 /**

@@ -22,10 +22,12 @@ import {
   bestOffer,
   cashOutWhenHeld,
   comboStake,
+  findOffer,
   findRestingBuy,
   isUpcoming,
   makerQuoteAmount,
   pickComboLegs,
+  readOrder,
   restingBuyPrice,
   takeBestQuote,
   wouldRest,
@@ -97,6 +99,38 @@ test("findRestingBuy skips a stale market whose start has passed and picks an up
   );
   const found = await findRestingBuy(client, { now: new Date("2026-10-21T06:00:00Z") });
   assert.equal(found?.market.market_id, "next");
+});
+
+test("findOffer picks the lowest offer of the first upcoming market that has one", async () => {
+  const client = stubClient(async () =>
+    json({
+      markets: [
+        { market_id: "past", event_status: "scheduled", event_start: "2026-10-19T00:00:00Z", offers: [{ price: "0.2000", quantity: "5.00" }] },
+        { market_id: "empty", event_status: "scheduled", event_start: "2026-10-21T19:00:00Z", offers: [] },
+        // REST lists offers highest first.
+        { market_id: "next", event_status: "scheduled", event_start: "2026-10-21T19:00:00Z", offers: [{ price: "0.5200", quantity: "3.00" }, { price: "0.4700", quantity: "10.00" }] },
+      ],
+      cursor: null,
+    }),
+  );
+  const found = await findOffer(client, { now: new Date("2026-10-21T06:00:00Z") });
+  assert.equal(found?.market.market_id, "next");
+  assert.equal(found?.price, "0.4700");
+});
+
+test("readOrder retries a 404 until the order is readable", async () => {
+  let calls = 0;
+  const client = stubClient(async () =>
+    ++calls < 3 ? json({ error: "Order not found" }, 404) : json({ order: { id: "o1", status: "open" } }),
+  );
+  const order = await readOrder(client, "o1");
+  assert.equal(order.status, "open");
+  assert.equal(calls, 3);
+});
+
+test("readOrder gives up after its timeout", async () => {
+  const client = stubClient(async () => json({ error: "Order not found" }, 404));
+  await assert.rejects(readOrder(client, "o1", 300), STXNotFoundException);
 });
 
 test("findRestingBuy walks pages and skips markets where the order would trade", async () => {
